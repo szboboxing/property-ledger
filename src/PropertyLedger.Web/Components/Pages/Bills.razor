@@ -36,6 +36,49 @@
     </div>
 </div>
 
+@* ── 补录过往账单（记录历史欠款，如接手前旧账） ── *@
+<div class="card p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center">
+        <strong>补录过往账单</strong>
+        <button class="btn btn-sm btn-outline-primary" @onclick="() => showManual = !showManual">
+            @(showManual ? "收起" : "展开")
+        </button>
+    </div>
+    @if (showManual)
+    {
+        <div class="row g-2 mt-1">
+            <div class="col-12 col-md-4">
+                <label class="form-label">租约 *</label>
+                <select class="form-select" @bind="manualLeaseId">
+                    @foreach (var l in manualLeases)
+                    {
+                        <option value="@l.Id">
+                            @l.Room?.Property?.Name · @l.Room?.Name · @l.Tenant?.Name @(l.Status == LeaseStatus.Ended ? "（已退租）" : "")
+                        </option>
+                    }
+                </select>
+                <div class="section-hint mt-1">已退租的租约也可补录历史月份账单。</div>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label">账期月份 *</label>
+                <input type="month" class="form-control" @bind="manualMonth" @bind:format="yyyy-MM" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label">金额</label>
+                <input type="number" step="0.01" min="0" class="form-control" @bind="manualAmount" placeholder="留空=按租约标准" />
+                <div class="section-hint mt-1">月付=月租；季付=三个月租金</div>
+            </div>
+            <div class="col-12 col-md-3 d-flex align-items-end">
+                <button class="btn btn-brand w-100" @onclick="SubmitManual">确认补录</button>
+            </div>
+            <div class="col-12">
+                <label class="form-label">备注（选填，可上传图片，如手写欠条照片）</label>
+                <RichNoteEditor @bind-Value="manualNote" Placeholder="补录原因 / 欠款说明" Height="100" />
+            </div>
+        </div>
+    }
+</div>
+
 @if (Error is not null)
 {
     <div class="alert alert-danger py-2 px-3">@Error</div>
@@ -67,6 +110,10 @@
                         @if (b.PeriodEnd.Year * 12 + b.PeriodEnd.Month > b.PeriodStart.Year * 12 + b.PeriodStart.Month)
                         {
                             <span class="badge-state st-neutral ms-1">季</span>
+                        }
+                        @if (b.IsManual)
+                        {
+                            <span class="badge-state st-partial ms-1">补录</span>
                         }
                     </td>
                     <td data-label="到期">@b.DueDate.ToString("MM-dd")</td>
@@ -200,6 +247,14 @@
                     <a class="btn btn-sm btn-outline-primary" href="@($"/bills/{selected.Id}/bill.png")" target="_blank" rel="noopener">下载账单图片（发微信）</a>
                 }
             </div>
+
+            @if (!string.IsNullOrWhiteSpace(selected.Note))
+            {
+                <div class="col-12">
+                    <div class="fw-semibold mb-2">备注</div>
+                    <div class="rich-view">@((MarkupString)selected.Note)</div>
+                </div>
+            }
         </div>
     </div>
 }
@@ -223,6 +278,14 @@
     private decimal newItemAmount;
     private string? newItemRemark;
 
+    // 补录过往账单表单
+    private bool showManual;
+    private List<Lease> manualLeases = new();
+    private int manualLeaseId;
+    private DateTime manualMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-1);
+    private decimal? manualAmount;
+    private string? manualNote;
+
     private string? Error, Ok;
 
     private List<Bill> filtered => ApplyFilter();
@@ -231,6 +294,34 @@
     {
         await Billing.EnsureBillsThroughAsync(today);
         await LoadAsync();
+        manualLeases = await Db.Leases
+            .Include(l => l.Room).ThenInclude(r => r!.Property)
+            .Include(l => l.Tenant)
+            .OrderBy(l => l.Status).ThenByDescending(l => l.StartDate)
+            .AsNoTracking()
+            .ToListAsync();
+        manualLeaseId = manualLeases.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private async Task SubmitManual()
+    {
+        if (manualLeaseId <= 0) { Error = "请选择租约。"; return; }
+        await RunSafe(async () =>
+        {
+            await Billing.CreateManualBillAsync(manualLeaseId, manualMonth.Year, manualMonth.Month, manualAmount, manualNote);
+            return true;
+        });
+        if (Error is null)
+        {
+            Ok = "已补录账单，列表已定位到该账期，可直接记账。";
+            manualAmount = null;
+            manualNote = null;
+            showManual = false;
+            // 定位到补录的账期月份，方便立刻看到
+            monthDate = new DateTime(manualMonth.Year, manualMonth.Month, 1);
+            showAll = false;
+            await LoadAsync();
+        }
     }
 
     private List<Bill> ApplyFilter()

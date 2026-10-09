@@ -37,8 +37,11 @@ public class Bill
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
-    /// <summary>备注</summary>
+    /// <summary>备注（支持富文本/图片，HTML 存储）</summary>
     public string? Note { get; set; }
+
+    /// <summary>是否人工补录（非自动出账生成，用于记录过往欠款）</summary>
+    public bool IsManual { get; set; }
 
     // 导航
     public Lease? Lease { get; set; }

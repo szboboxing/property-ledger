@@ -1,0 +1,96 @@
+@* 富文本备注编辑器：加粗/斜体/下划线/插图/清除格式，以 HTML 存入 Note 字段。
+   编辑区内容由 JS 维护（Blazor 不参与其内部渲染），变化经 DotNetObjectReference 上报。 *@
+@implements IAsyncDisposable
+
+<div class="rich-note">
+    <div class="rich-toolbar">
+        <button type="button" class="rich-btn" title="加粗" @onclick='() => Exec("bold")'><b>B</b></button>
+        <button type="button" class="rich-btn" title="斜体" @onclick='() => Exec("italic")'><i>I</i></button>
+        <button type="button" class="rich-btn" title="下划线" @onclick='() => Exec("underline")'><u>U</u></button>
+        <button type="button" class="rich-btn" title="上传图片" @onclick="PickImage">🖼 图片</button>
+        <button type="button" class="rich-btn" title="清除格式" @onclick='() => Exec("removeFormat")'>清除格式</button>
+        @if (_uploadMsg is not null)
+        {
+            <span class="rich-status">@_uploadMsg</span>
+        }
+    </div>
+    <div class="rich-editor" @ref="EditorRef" contenteditable="true" data-placeholder="@Placeholder" style="min-height:@(Height)px"></div>
+    <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="d-none" @ref="FileRef" />
+</div>
+
+@code {
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    /// <summary>备注 HTML 内容（与 Note 字段绑定）。</summary>
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    /// <summary>编辑区最小高度（像素）。</summary>
+    [Parameter] public int Height { get; set; } = 130;
+
+    private ElementReference EditorRef;
+    private ElementReference FileRef;
+    private DotNetObjectReference<RichNoteEditor>? selfRef;
+    private string? _lastFromEditor;
+    private string? _uploadMsg;
+    private bool _initialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("richnote.init", EditorRef, FileRef, selfRef, Value ?? "");
+            _lastFromEditor = Value;
+            _initialized = true;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // 外部重新赋值（点「编辑」载入旧备注 / 保存后清空）→ 推送到编辑器；
+        // 编辑器自己上报的内容不回推，避免光标跳动
+        if (_initialized && Value != _lastFromEditor)
+        {
+            _lastFromEditor = Value;
+            await JS.InvokeVoidAsync("richnote.setContent", EditorRef, Value ?? "");
+        }
+    }
+
+    private async Task Exec(string cmd) => await JS.InvokeVoidAsync("richnote.exec", EditorRef, cmd);
+
+    private async Task PickImage()
+    {
+        _uploadMsg = null;
+        await JS.InvokeVoidAsync("richnote.pickFile", FileRef);
+    }
+
+    [JSInvokable]
+    public async Task OnEditorChange(string html)
+    {
+        _lastFromEditor = html;
+        if (html == Value) return;
+        Value = html;
+        await ValueChanged.InvokeAsync(html);
+    }
+
+    [JSInvokable]
+    public void OnUploadStart()
+    {
+        _uploadMsg = "图片上传中…";
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnUploadDone(string error)
+    {
+        _uploadMsg = string.IsNullOrEmpty(error) ? null : error;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        selfRef?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

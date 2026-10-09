@@ -8,10 +8,13 @@ A landlord's ledger: properties → rooms → tenants → leases → automatic m
 
 - 登录即首页：打开站点直接呈现账号密码登录页，登录后进入仪表盘
 - 双角色：**总管理员**（全部功能 + 用户管理）/ **普通用户**（按分配的功能显示界面）
-- 总管理员可管理用户账号：创建用户、重置密码、停用/启用、按用户勾选可用功能（账单/租约/房间/租客/物业/设置）
-- 物业 / 房间 / 租客 / 租约管理（起止日期、押金、付租日、月付/季付）
+- 总管理员可管理用户账号：创建用户、重置密码、停用/启用、按用户勾选可用功能（账单/报表/租约/房间/租客/物业/设置）
+- 物业 / 房间 / 租客 / 租约管理（起止日期、押金、付租日、月付/季付）；物业支持类型（房屋/商铺/公寓）与管理处、水电燃气联系方式
 - 按月自动出账（幂等补账），逾期 / 到期标识
+- 补录过往账单：接手旧账/历史欠款可按租约 + 月份补录（已退租租约也可补），金额留空自动按租约标准计算
+- 报表：应收 / 已收 / 未收 / 收款率总览，按账期月份与按物业分组统计，支持按年份筛选
 - 账单杂费自定义、部分收款、状态自动迁移（未付 / 部分已付 / 已结清）
+- 富文本备注：物业 / 房间 / 租客 / 租约 / 账单备注均支持加粗、斜体、下划线与**上传图片**（登录可见，文件落库外存储并随数据卷持久化）
 - 账单图片导出（SkiaSharp 中文渲染 + 收款二维码），手机保存后微信转发
 - 桌面常驻侧边栏（彩色图标导航），手机端抽屉菜单，移动端自适应
 - 多用户登录（PBKDF2 密码哈希，首建总管理员 `admin / admin123`）
@@ -21,7 +24,7 @@ A landlord's ledger: properties → rooms → tenants → leases → automatic m
 - ASP.NET Core **Blazor Server**（.NET 10 LTS）
 - **EF Core 10 + PostgreSQL 17**（Npgsql）
 - **SkiaSharp** 账单图片渲染（MIT 许可）
-- xunit 单元测试（19 个用例）
+- xunit 单元测试（39 个用例）
 - Docker 多架构镜像（amd64 / arm64），推送 GHCR
 
 ## 部署 Deployment
@@ -66,12 +69,13 @@ docker run -d --name propertyledger-web \
   --restart unless-stopped \
   --network propertyledger-net \
   -p 8080:8080 \
+  -v propertyledger-uploads:/app/uploads \
   -e ConnectionStrings__Default="Host=db;Port=5432;Database=propertyledger;Username=property;Password=property" \
   -e TZ=Asia/Shanghai \
   ghcr.io/szboboxing/property-ledger:latest
 ```
 
-升级：`docker pull ghcr.io/szboboxing/property-ledger:latest && docker rm -f propertyledger-web` 后重新执行第 3 步（数据在 `propertyledger-pgdata` 卷中，不受影响）。
+升级：`docker pull ghcr.io/szboboxing/property-ledger:latest && docker rm -f propertyledger-web` 后重新执行第 3 步（数据在 `propertyledger-pgdata`、备注图片在 `propertyledger-uploads` 卷中，不受影响）。
 
 ### 数据备份与恢复
 
@@ -115,6 +119,15 @@ ghcr.io/szboboxing/property-ledger:latest
 推送 `v*.*` 标签触发 GitHub Actions：先跑测试，再多架构构建并推送 GHCR。
 
 ## 更新日志 Changelog
+
+### v1.3（2026-10-10）
+
+- 物业增强：新增类型选择（房屋 / 商铺 / 公寓），新增「管理处联系方式」「水电燃气联系方式」两列
+- 富文本备注：物业 / 房间 / 租客 / 租约 / 账单备注全部升级为富文本编辑器（加粗 / 斜体 / 下划线 / 清除格式），支持**上传图片**（jpg/png/gif/webp，单张 ≤ 5MB，登录可见；列表中以摘要 +「查看」展开）
+- 补录过往账单：账单页新增补录入口，选择租约 + 账期月份即可补录历史欠款（已退租租约也可补录）；金额留空自动按租约标准计算（月付 = 月租，季付 = 三个月租金），补录账单带「补录」标识
+- 新增报表页（普通用户可按需授权）：应收 / 已收 / 未收 / 收款率汇总卡 + 状态计数，按账期月份、按物业两组明细，支持按年份筛选
+- 备注图片持久化：Docker 部署新增 `uploads` 数据卷
+- 单元测试扩充至 39 个（补录校验 / HTML 摘要 / 报表权限）
 
 ### v1.2（2026-10-09）
 

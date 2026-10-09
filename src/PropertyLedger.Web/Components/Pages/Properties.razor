@@ -14,15 +14,33 @@
         <strong>@(editingId is null ? "新增物业" : "编辑物业")</strong>
     </div>
     <div class="row g-2">
-        <div class="col-12 col-md-4">
+        <div class="col-12 col-md-3">
             <label class="form-label">物业名称 *</label>
             <input class="form-control" @bind="form.Name" placeholder="如：阳光花园" />
         </div>
-        <div class="col-12 col-md-5">
+        <div class="col-6 col-md-2">
+            <label class="form-label">类型</label>
+            <select class="form-select" @bind="form.Type">
+                @foreach (var kv in EnumLabels.PropertyTypes)
+                {
+                    <option value="@kv.Key">@kv.Value</option>
+                }
+            </select>
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">管理处联系方式</label>
+            <input class="form-control" @bind="form.ManagementContact" placeholder="选填，如 0755-12345678" />
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">水电燃气联系方式</label>
+            <input class="form-control" @bind="form.UtilityContact" placeholder="选填" />
+        </div>
+        <div class="col-6 col-md-1 d-flex align-items-end"></div>
+        <div class="col-12 col-md-8">
             <label class="form-label">地址</label>
             <input class="form-control" @bind="form.Address" placeholder="选填" />
         </div>
-        <div class="col-12 col-md-3 d-flex align-items-end gap-2">
+        <div class="col-12 col-md-4 d-flex align-items-end gap-2">
             <button class="btn btn-brand" @onclick="Save">@(editingId is null ? "添加" : "保存")</button>
             @if (editingId is not null)
             {
@@ -30,8 +48,8 @@
             }
         </div>
         <div class="col-12">
-            <label class="form-label">备注</label>
-            <input class="form-control" @bind="form.Note" placeholder="选填" />
+            <label class="form-label">备注（支持富文本 / 上传图片）</label>
+            <RichNoteEditor @bind-Value="form.Note" Placeholder="选填，可插入图片" Height="110" />
         </div>
     </div>
     @if (Error is not null)
@@ -43,25 +61,44 @@
 <div class="table-wrap">
     <table class="data">
         <thead>
-            <tr><th>名称</th><th>地址</th><th>备注</th><th class="num">房间数</th><th class="num">操作</th></tr>
+            <tr><th>名称</th><th>类型</th><th>地址</th><th>管理处联系</th><th>水电燃气联系</th><th>备注</th><th class="num">房间数</th><th class="num">操作</th></tr>
         </thead>
         <tbody>
             @if (items.Count == 0)
             {
-                <tr><td colspan="5" class="empty no-label">还没有物业，先在上面添加一个</td></tr>
+                <tr><td colspan="8" class="empty no-label">还没有物业，先在上面添加一个</td></tr>
             }
             @foreach (var p in items)
             {
                 <tr>
                     <td data-label="名称" class="fw-semibold">@p.Name</td>
+                    <td data-label="类型">@EnumLabels.Name(p.Type)</td>
                     <td data-label="地址">@(p.Address ?? "—")</td>
-                    <td data-label="备注">@(p.Note ?? "—")</td>
+                    <td data-label="管理处联系">@(p.ManagementContact ?? "—")</td>
+                    <td data-label="水电燃气联系">@(p.UtilityContact ?? "—")</td>
+                    <td data-label="备注">
+                        @if (HtmlText.Excerpt(p.Note) is { Length: > 0 } excerpt)
+                        {
+                            @excerpt
+                            <button class="btn btn-sm btn-link p-0 ms-1 align-baseline" @onclick="() => ToggleNote(p.Id)">@(expandedNotes.Contains(p.Id) ? "收起" : "查看")</button>
+                        }
+                        else
+                        {
+                            <span class="section-hint">—</span>
+                        }
+                    </td>
                     <td data-label="房间数" class="num">@p.Rooms.Count</td>
                     <td data-label="操作" class="num no-label">
                         <button class="btn btn-sm btn-outline-primary" @onclick="() => Edit(p)">编辑</button>
                         <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(p)">删除</button>
                     </td>
                 </tr>
+                @if (expandedNotes.Contains(p.Id))
+                {
+                    <tr class="note-expand">
+                        <td colspan="8" class="no-label"><div class="rich-view">@((MarkupString)(p.Note ?? ""))</div></td>
+                    </tr>
+                }
             }
         </tbody>
     </table>
@@ -72,11 +109,20 @@
     private int? editingId;
     private string? Error;
     private FormModel form = new();
+    private HashSet<int> expandedNotes = new();
+
+    private void ToggleNote(int id)
+    {
+        if (!expandedNotes.Remove(id)) expandedNotes.Add(id);
+    }
 
     private class FormModel
     {
         public string Name { get; set; } = "";
+        public PropertyType Type { get; set; } = PropertyType.House;
         public string? Address { get; set; }
+        public string? ManagementContact { get; set; }
+        public string? UtilityContact { get; set; }
         public string? Note { get; set; }
     }
 
@@ -93,7 +139,15 @@
     private void Edit(Property p)
     {
         editingId = p.Id;
-        form = new FormModel { Name = p.Name, Address = p.Address, Note = p.Note };
+        form = new FormModel
+        {
+            Name = p.Name,
+            Type = p.Type,
+            Address = p.Address,
+            ManagementContact = p.ManagementContact,
+            UtilityContact = p.UtilityContact,
+            Note = p.Note,
+        };
         Error = null;
     }
 
@@ -114,7 +168,15 @@
 
         if (editingId is null)
         {
-            Db.Properties.Add(new Property { Name = form.Name.Trim(), Address = form.Address, Note = form.Note });
+            Db.Properties.Add(new Property
+            {
+                Name = form.Name.Trim(),
+                Type = form.Type,
+                Address = form.Address,
+                ManagementContact = form.ManagementContact,
+                UtilityContact = form.UtilityContact,
+                Note = form.Note,
+            });
         }
         else
         {
@@ -122,7 +184,10 @@
             if (p is not null)
             {
                 p.Name = form.Name.Trim();
+                p.Type = form.Type;
                 p.Address = form.Address;
+                p.ManagementContact = form.ManagementContact;
+                p.UtilityContact = form.UtilityContact;
                 p.Note = form.Note;
             }
         }

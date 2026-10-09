@@ -12,6 +12,7 @@ out/
 
 ## 本地运行数据（仅根目录，避免误伤代码中的 Data/ 目录）
 /data/
+/uploads/
 *.db
 *.db-shm
 *.db-wal

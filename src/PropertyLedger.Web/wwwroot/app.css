@@ -141,3 +141,15 @@ table.data tbody td { padding: 10px 12px; vertical-align: middle; border-top: 1p
     display: none; left: 0; padding: 10px 14px; position: fixed; width: 100%; z-index: 2000; font-size: .9rem;
 }
 #blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: 12px; top: 8px; }
+
+/* 富文本备注编辑器 / 展示 */
+.rich-note { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+.rich-toolbar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; background: #f9fafb; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.rich-btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 3px 10px; font-size: .84rem; cursor: pointer; }
+.rich-btn:hover { background: #f3f4f6; }
+.rich-status { color: var(--danger); font-size: .8rem; margin-left: 6px; }
+.rich-editor { min-height: 130px; padding: 10px 12px; outline: none; overflow-y: auto; max-height: 320px; background: #fff; }
+.rich-editor:empty:before { content: attr(data-placeholder); color: #9ca3af; }
+.rich-note img, .rich-view img { max-width: 100%; height: auto; border-radius: 8px; }
+.rich-view { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; overflow-x: auto; }
+.note-expand td { background: #fafafa; }

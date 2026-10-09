@@ -6,6 +6,10 @@
 {
     <NavLink class="nav-item" href="/bills"><span class="ico">💰</span>账单记账</NavLink>
 }
+@if (Can("reports"))
+{
+    <NavLink class="nav-item" href="/reports"><span class="ico">📈</span>报表</NavLink>
+}
 @if (Can("leases"))
 {
     <NavLink class="nav-item" href="/leases"><span class="ico">📄</span>租约</NavLink>

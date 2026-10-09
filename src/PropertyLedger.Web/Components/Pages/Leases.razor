@@ -70,8 +70,8 @@ else
                 </select>
             </div>
             <div class="col-12">
-                <label class="form-label">备注</label>
-                <input class="form-control" @bind="form.Note" placeholder="选填，如 含宽带、家电清单" />
+                <label class="form-label">备注（支持富文本 / 上传图片）</label>
+                <RichNoteEditor @bind-Value="form.Note" Placeholder="选填，如 含宽带、家电清单，可插入图片" Height="110" />
             </div>
             <div class="col-12 d-flex gap-2">
                 <button class="btn btn-brand" @onclick="Save">@(editingId is null ? "签订租约" : "保存")</button>

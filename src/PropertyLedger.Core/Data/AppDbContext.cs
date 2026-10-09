@@ -34,6 +34,9 @@ public class AppDbContext : DbContext
             e.HasIndex(p => p.Name);
             e.Property(p => p.Name).IsRequired().HasMaxLength(100);
             e.Property(p => p.Address).HasMaxLength(200);
+            e.Property(p => p.Type).HasConversion<string>().HasMaxLength(20);
+            e.Property(p => p.ManagementContact).HasMaxLength(100);
+            e.Property(p => p.UtilityContact).HasMaxLength(100);
         });
 
         b.Entity<Room>(e =>

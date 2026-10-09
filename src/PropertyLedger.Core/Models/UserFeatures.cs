@@ -10,6 +10,7 @@ public static class UserFeatures
     public static readonly IReadOnlyList<(string Key, string Name)> All = new (string, string)[]
     {
         ("bills", "账单记账"),
+        ("reports", "报表"),
         ("leases", "租约"),
         ("rooms", "房间"),
         ("tenants", "租客"),

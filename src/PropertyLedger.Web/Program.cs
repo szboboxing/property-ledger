@@ -76,6 +76,9 @@ app.UseAuthorization();
 // 账单图片（供下载后用微信转发给租客）
 app.MapBillImageEndpoints();
 
+// 富文本备注插图的上传 / 查看
+app.MapUploadEndpoints();
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

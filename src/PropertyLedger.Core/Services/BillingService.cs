@@ -114,6 +114,50 @@ public class BillingService
         return created;
     }
 
+    // ───────────────────────── 人工补录 ─────────────────────────
+
+    /// <summary>
+    /// 补录过往账单（记录历史欠款）：为指定租约补一张指定月份的账单。
+    /// 允许补录已结束的租约，但账期必须与租期有交集；同账期已有账单则拒绝（唯一索引兜底）。
+    /// 金额留空时按租约标准金额自动计算（季付 = 三个月租金）。
+    /// </summary>
+    public async Task<Bill> CreateManualBillAsync(
+        int leaseId, int year, int month, decimal? amount, string? note, CancellationToken ct = default)
+    {
+        var lease = await _db.Leases.AsNoTracking().FirstOrDefaultAsync(l => l.Id == leaseId, ct)
+                    ?? throw new DomainException("租约不存在。");
+
+        if (amount is { } amt && amt <= 0m)
+            throw new DomainException("补录金额必须大于 0。");
+
+        if (!TryGetPeriod(lease, year, month, out var plan))
+            throw new DomainException($"{year} 年 {month} 月不在该租约的租期内，无法补录。");
+
+        var dup = await _db.Bills.AnyAsync(b => b.LeaseId == leaseId && b.PeriodStart == plan.PeriodStart, ct);
+        if (dup)
+            throw new DomainException("该账期已存在账单，无需重复补录。");
+
+        var rent = amount ?? plan.RentAmount;
+        var bill = new Bill
+        {
+            LeaseId = lease.Id,
+            RoomId = lease.RoomId,
+            TenantId = lease.TenantId,
+            PeriodStart = plan.PeriodStart,
+            PeriodEnd = plan.PeriodEnd,
+            DueDate = plan.DueDate,
+            RentAmount = rent,
+            TotalAmount = rent,
+            PaidAmount = 0m,
+            Status = BillStatus.Unpaid,
+            IsManual = true,
+            Note = note,
+        };
+        _db.Bills.Add(bill);
+        await _db.SaveChangesAsync(ct);
+        return bill;
+    }
+
     // ───────────────────────── 收款 ─────────────────────────
 
     /// <summary>登记一笔收款（支持部分收款），自动累加并更新状态。</summary>

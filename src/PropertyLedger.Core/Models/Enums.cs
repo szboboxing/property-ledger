@@ -42,3 +42,30 @@ public enum PaymentMethod
     Cash = 3,     // 现金
     Other = 4,    // 其他
 }
+
+/// <summary>物业类型</summary>
+public enum PropertyType
+{
+    /// <summary>房屋（住宅）</summary>
+    House = 0,
+
+    /// <summary>商铺</summary>
+    Shop = 1,
+
+    /// <summary>公寓</summary>
+    Apartment = 2,
+}
+
+/// <summary>枚举的中文显示名（界面统一从这里取，避免各页硬编码）。</summary>
+public static class EnumLabels
+{
+    public static readonly IReadOnlyDictionary<PropertyType, string> PropertyTypes =
+        new Dictionary<PropertyType, string>
+        {
+            [PropertyType.House] = "房屋",
+            [PropertyType.Shop] = "商铺",
+            [PropertyType.Apartment] = "公寓",
+        };
+
+    public static string Name(PropertyType t) => PropertyTypes[t];
+}

@@ -47,8 +47,8 @@ else
                 }
             </div>
             <div class="col-12 col-md-8">
-                <label class="form-label">备注</label>
-                <input class="form-control" @bind="form.Note" placeholder="选填，如 朝南、带空调" />
+                <label class="form-label">备注（支持富文本 / 上传图片）</label>
+                <RichNoteEditor @bind-Value="form.Note" Placeholder="选填，如 朝南、带空调，可插入图片" Height="100" />
             </div>
             @if (editingId is not null)
             {
@@ -96,12 +96,28 @@ else
                                 <span class="section-hint">空置</span>
                             }
                         </td>
-                        <td data-label="备注">@(r.Note ?? "—")</td>
+                        <td data-label="备注">
+                            @if (HtmlText.Excerpt(r.Note) is { Length: > 0 } excerpt)
+                            {
+                                @excerpt
+                                <button class="btn btn-sm btn-link p-0 ms-1 align-baseline" @onclick="() => ToggleNote(r.Id)">@(expandedNotes.Contains(r.Id) ? "收起" : "查看")</button>
+                            }
+                            else
+                            {
+                                <span class="section-hint">—</span>
+                            }
+                        </td>
                         <td data-label="操作" class="num no-label">
                             <button class="btn btn-sm btn-outline-primary" @onclick="() => Edit(r)">编辑</button>
                             <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(r)">删除</button>
                         </td>
                     </tr>
+                    @if (expandedNotes.Contains(r.Id))
+                    {
+                        <tr class="note-expand">
+                            <td colspan="6" class="no-label"><div class="rich-view">@((MarkupString)(r.Note ?? ""))</div></td>
+                        </tr>
+                    }
                 }
             </tbody>
         </table>
@@ -114,6 +130,12 @@ else
     private int? editingId;
     private string? Error;
     private FormModel form = new();
+    private HashSet<int> expandedNotes = new();
+
+    private void ToggleNote(int id)
+    {
+        if (!expandedNotes.Remove(id)) expandedNotes.Add(id);
+    }
 
     private class FormModel
     {

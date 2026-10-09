@@ -1,0 +1,156 @@
+@page "/reports"
+@attribute [Authorize(Policy = "Feature:reports")]
+@rendermode InteractiveServer
+@inject AppDbContext Db
+
+<PageTitle>报表</PageTitle>
+
+<div class="page-head">
+    <h1>报表</h1>
+    <select class="form-select w-auto" @bind="yearFilter">
+        <option value="0">全部年份</option>
+        @foreach (var y in years)
+        {
+            <option value="@y">@y 年</option>
+        }
+    </select>
+</div>
+
+@if (all.Count == 0)
+{
+    <div class="card p-4 empty">还没有账单数据。签订租约并出账后，这里会汇总展示应收 / 已收 / 未收情况。</div>
+}
+else
+{
+    <div class="stat-grid">
+        <div class="stat">
+            <div class="label">应收合计</div>
+            <div class="value">¥@sumTotal.ToString("0.00")</div>
+        </div>
+        <div class="stat">
+            <div class="label">已收合计</div>
+            <div class="value ok">¥@sumPaid.ToString("0.00")</div>
+        </div>
+        <div class="stat">
+            <div class="label">未收合计</div>
+            <div class="value danger">¥@sumDue.ToString("0.00")</div>
+        </div>
+        <div class="stat">
+            <div class="label">收款率</div>
+            <div class="value">@Rate</div>
+        </div>
+    </div>
+
+    <div class="card p-3 mb-3 d-flex gap-3 flex-wrap align-items-center">
+        <span class="badge-state st-unpaid">未付 @countUnpaid</span>
+        <span class="badge-state st-partial">部分已付 @countPartial</span>
+        <span class="badge-state st-paid">已结清 @countPaid</span>
+        <span class="badge-state st-overdue">已逾期 @countOverdue</span>
+        <span class="section-hint ms-auto">含自动出账与人工补录账单</span>
+    </div>
+
+    <h5 class="mt-2 mb-2">按账期月份</h5>
+    <div class="table-wrap mb-4">
+        <table class="data">
+            <thead>
+                <tr><th>月份</th><th class="num">账单数</th><th class="num">应收</th><th class="num">已收</th><th class="num">未收</th><th class="num">收款率</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var m in Monthly)
+                {
+                    <tr>
+                        <td data-label="月份" class="fw-semibold">@m.Year.ToString() 年 @m.Month.ToString("00") 月</td>
+                        <td data-label="账单数" class="num">@m.Count</td>
+                        <td data-label="应收" class="num">¥@m.Total.ToString("0.00")</td>
+                        <td data-label="已收" class="num">¥@m.Paid.ToString("0.00")</td>
+                        <td data-label="未收" class="num @(m.Total - m.Paid > 0 ? "text-danger" : "")">¥@((m.Total - m.Paid).ToString("0.00"))</td>
+                        <td data-label="收款率" class="num">@RateOf(m.Total, m.Paid)</td>
+                    </tr>
+                }
+                <tr>
+                    <td data-label="月份" class="fw-bold">合计</td>
+                    <td data-label="账单数" class="num fw-bold">@scoped.Count()</td>
+                    <td data-label="应收" class="num fw-bold">¥@sumTotal.ToString("0.00")</td>
+                    <td data-label="已收" class="num fw-bold">¥@sumPaid.ToString("0.00")</td>
+                    <td data-label="未收" class="num fw-bold text-danger">¥@sumDue.ToString("0.00")</td>
+                    <td data-label="收款率" class="num fw-bold">@Rate</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h5 class="mt-2 mb-2">按物业</h5>
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr><th>物业</th><th class="num">账单数</th><th class="num">应收</th><th class="num">已收</th><th class="num">未收</th><th class="num">收款率</th></tr>
+            </thead>
+            <tbody>
+                @if (ByProperty.Count == 0)
+                {
+                    <tr><td colspan="6" class="empty no-label">没有数据</td></tr>
+                }
+                @foreach (var p in ByProperty)
+                {
+                    <tr>
+                        <td data-label="物业" class="fw-semibold">@p.Name</td>
+                        <td data-label="账单数" class="num">@p.Count</td>
+                        <td data-label="应收" class="num">¥@p.Total.ToString("0.00")</td>
+                        <td data-label="已收" class="num">¥@p.Paid.ToString("0.00")</td>
+                        <td data-label="未收" class="num @(p.Total - p.Paid > 0 ? "text-danger" : "")">¥@((p.Total - p.Paid).ToString("0.00"))</td>
+                        <td data-label="收款率" class="num">@RateOf(p.Total, p.Paid)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<Bill> all = new();
+    private int yearFilter;
+    private DateTime today = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        all = await Db.Bills
+            .Include(b => b.Room).ThenInclude(r => r!.Property)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+
+    private List<int> years => all.Select(b => b.PeriodStart.Year).Distinct().OrderByDescending(y => y).ToList();
+
+    private IEnumerable<Bill> scoped => yearFilter == 0 ? all : all.Where(b => b.PeriodStart.Year == yearFilter);
+
+    private decimal sumTotal => scoped.Sum(b => b.TotalAmount);
+    private decimal sumPaid => scoped.Sum(b => b.PaidAmount);
+    private decimal sumDue => sumTotal - sumPaid;
+    private string Rate => sumTotal <= 0 ? "—" : (sumPaid / sumTotal * 100m).ToString("0.0") + "%";
+
+    private static string RateOf(decimal total, decimal paid)
+        => total <= 0 ? "—" : (paid / total * 100m).ToString("0.0") + "%";
+
+    private int countUnpaid => scoped.Count(b => b.Status == BillStatus.Unpaid && !b.IsOverdue(today));
+    private int countPartial => scoped.Count(b => b.Status == BillStatus.Partial);
+    private int countPaid => scoped.Count(b => b.Status == BillStatus.Paid);
+    private int countOverdue => scoped.Count(b => b.IsOverdue(today));
+
+    private sealed record MonthRow(int Year, int Month, int Count, decimal Total, decimal Paid);
+
+    private List<MonthRow> Monthly => scoped
+        .GroupBy(b => (b.PeriodStart.Year, b.PeriodStart.Month))
+        .Select(g => new MonthRow(g.Key.Year, g.Key.Month, g.Count(), g.Sum(b => b.TotalAmount), g.Sum(b => b.PaidAmount)))
+        .OrderByDescending(r => r.Year).ThenByDescending(r => r.Month)
+        .ToList();
+
+    private sealed record PropRow(string Name, int Count, decimal Total, decimal Paid);
+
+    private List<PropRow> ByProperty => scoped
+        .GroupBy(b => b.Room?.PropertyId ?? 0)
+        .Select(g => new PropRow(
+            g.First().Room?.Property?.Name ?? "未知物业",
+            g.Count(), g.Sum(b => b.TotalAmount), g.Sum(b => b.PaidAmount)))
+        .OrderByDescending(r => r.Total)
+        .ToList();
+}

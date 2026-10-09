@@ -32,11 +32,14 @@ services:
       TZ: Asia/Shanghai
     ports:
       - "${WEB_PORT:-8080}:8080"
+    volumes:
+      - uploads:/app/uploads   # 富文本备注图片持久化
     networks:
       - internal
 
 volumes:
   pgdata:
+  uploads:
 
 networks:
   internal:
