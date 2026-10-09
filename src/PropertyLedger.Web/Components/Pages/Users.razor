@@ -1,0 +1,158 @@
+@page "/users"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin")]
+@inject AuthService Auth
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>用户管理</PageTitle>
+
+<div class="page-head"><h1>用户</h1></div>
+
+@if (Error is not null) { <div class="alert alert-danger py-2 px-3">@Error</div> }
+@if (Ok is not null) { <div class="alert alert-success py-2 px-3">@Ok</div> }
+
+<div class="card p-3 mb-3">
+    <strong class="d-block mb-2">新增用户</strong>
+    <div class="row g-2">
+        <div class="col-6 col-md-3">
+            <label class="form-label">登录名 *</label>
+            <input class="form-control" @bind="newUserName" />
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">显示名</label>
+            <input class="form-control" @bind="newDisplayName" />
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">初始密码 *（≥6位）</label>
+            <input type="text" class="form-control" @bind="newPassword" />
+        </div>
+        <div class="col-6 col-md-2 d-flex align-items-end">
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="isAdmin" @bind="newIsAdmin" />
+                <label class="form-check-label" for="isAdmin">管理员</label>
+            </div>
+        </div>
+        <div class="col-12 col-md-1 d-flex align-items-end">
+            <button class="btn btn-brand w-100" @onclick="Create">添加</button>
+        </div>
+    </div>
+</div>
+
+<div class="table-wrap">
+    <table class="data">
+        <thead><tr><th>登录名</th><th>显示名</th><th>角色</th><th>状态</th><th>最近登录</th><th class="num">操作</th></tr></thead>
+        <tbody>
+            @foreach (var u in users)
+            {
+                var isSelf = u.Id == currentUserId;
+                <tr>
+                    <td data-label="登录名" class="fw-semibold">@u.UserName @if (isSelf){<span class="badge-state st-neutral ms-1">我</span>}</td>
+                    <td data-label="显示名">@u.DisplayName</td>
+                    <td data-label="角色">@(u.IsAdmin ? "管理员" : "普通用户")</td>
+                    <td data-label="状态">
+                        @if (u.IsActive)
+                        {
+                            <span class="badge-state st-paid">启用</span>
+                        }
+                        else
+                        {
+                            <span class="badge-state st-neutral">已停用</span>
+                        }
+                    </td>
+                    <td data-label="最近登录">@(u.LastLoginAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                    <td data-label="操作" class="num no-label">
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleReset(u.Id)">重置密码</button>
+                        @if (u.IsActive)
+                        {
+                            <button class="btn btn-sm btn-outline-warning" disabled="@isSelf" @onclick="() => SetActive(u.Id, false)">停用</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-success" @onclick="() => SetActive(u.Id, true)">启用</button>
+                        }
+                    </td>
+                </tr>
+                @if (resetId == u.Id)
+                {
+                    <tr>
+                        <td colspan="6" class="no-label">
+                            <div class="d-flex gap-2 align-items-center py-2">
+                                <span>为 @u.UserName 设置新密码：</span>
+                                <input type="text" class="form-control form-control-sm" style="max-width:220px" @bind="resetPassword" placeholder="新密码（≥6位）" />
+                                <button class="btn btn-brand btn-sm" @onclick="() => DoReset(u.Id)">确认</button>
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="CancelReset">取消</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<AppUser> users = new();
+    private int currentUserId;
+
+    private string newUserName = "", newDisplayName = "", newPassword = "";
+    private bool newIsAdmin;
+
+    private int? resetId;
+    private string resetPassword = "";
+    private string? Error, Ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        int.TryParse(state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out currentUserId);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => users = await Auth.ListAsync();
+
+    private async Task Create()
+    {
+        Error = Ok = null;
+        await RunSafe(() => Auth.CreateAsync(newUserName, newDisplayName, newPassword, newIsAdmin));
+        if (Error is null)
+        {
+            newUserName = newDisplayName = newPassword = ""; newIsAdmin = false;
+            Ok = "用户已创建。";
+            await LoadAsync();
+        }
+    }
+
+    private async Task SetActive(int id, bool active)
+    {
+        Error = Ok = null;
+        await RunSafe(() => Auth.SetActiveAsync(id, active));
+        if (Error is null) { Ok = active ? "已启用。" : "已停用。"; await LoadAsync(); }
+    }
+
+    private void ToggleReset(int id)
+    {
+        resetId = resetId == id ? null : id;
+        resetPassword = "";
+        Error = Ok = null;
+    }
+
+    private void CancelReset()
+    {
+        resetId = null;
+        resetPassword = "";
+        Error = Ok = null;
+    }
+
+    private async Task DoReset(int id)
+    {
+        Error = Ok = null;
+        await RunSafe(() => Auth.ChangePasswordAsync(id, resetPassword));
+        if (Error is null) { resetId = null; resetPassword = ""; Ok = "密码已重置。"; }
+    }
+
+    private async Task RunSafe(Func<Task> action)
+    {
+        try { await action(); }
+        catch (DomainException ex) { Error = ex.Message; }
+    }
+}

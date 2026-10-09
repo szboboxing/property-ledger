@@ -1,0 +1,114 @@
+@page "/"
+@rendermode InteractiveServer
+@inject AppDbContext Db
+@inject BillingService Billing
+
+<PageTitle>仪表盘 · 物业管理小工具</PageTitle>
+
+<div class="page-head">
+    <h1>仪表盘</h1>
+    <a class="btn btn-brand btn-sm" href="bills">前往记账 / 收款</a>
+</div>
+
+<div class="stat-grid">
+    <div class="stat">
+        <div class="label">本月应收（@today.ToString("yyyy-MM")）</div>
+        <div class="value">¥@MonthTotal.ToString("0.00")</div>
+    </div>
+    <div class="stat">
+        <div class="label">本月已收</div>
+        <div class="value ok">¥@MonthPaid.ToString("0.00")</div>
+    </div>
+    <div class="stat">
+        <div class="label">待收剩余（本月）</div>
+        <div class="value @(MonthRemaining > 0 ? "warn" : "")">¥@MonthRemaining.ToString("0.00")</div>
+    </div>
+    <div class="stat">
+        <div class="label">逾期未收（全部）</div>
+        <div class="value @(OverdueTotal > 0 ? "danger" : "")">¥@OverdueTotal.ToString("0.00")</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="stat"><div class="label">物业</div><div class="value" style="font-size:1.25rem">@propertyCount</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat"><div class="label">房间总数</div><div class="value" style="font-size:1.25rem">@roomCount</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat"><div class="label">在租房间</div><div class="value ok" style="font-size:1.25rem">@rentedCount</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat"><div class="label">空置房间</div><div class="value @(vacantCount>0?"warn":"")" style="font-size:1.25rem">@vacantCount</div></div>
+    </div>
+</div>
+
+<div class="card p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong>待收款账单</strong>
+        <a href="bills" class="section-hint">查看全部 →</a>
+    </div>
+    @if (pending.Count == 0)
+    {
+        <div class="empty">本月没有待收账单，全部结清 🎉</div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>房间 / 租客</th><th>账期</th><th class="num">应收</th><th class="num">已收</th><th class="num">剩余</th><th>到期日</th><th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var b in pending)
+                    {
+                        <tr>
+                            <td data-label="房间/租客"><div>@b.Room?.Name</div><div class="section-hint">@b.Tenant?.Name</div></td>
+                            <td data-label="账期">@b.PeriodStart.ToString("yyyy-MM")</td>
+                            <td data-label="应收" class="num">¥@b.TotalAmount.ToString("0.00")</td>
+                            <td data-label="已收" class="num">¥@b.PaidAmount.ToString("0.00")</td>
+                            <td data-label="剩余" class="num text-danger fw-semibold">¥@b.RemainingAmount.ToString("0.00")</td>
+                            <td data-label="到期日">@b.DueDate.ToString("MM-dd")</td>
+                            <td data-label="状态"><StatusBadge Bill="b" Today="today" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private DateTime today = DateTime.Today;
+    private decimal MonthTotal, MonthPaid, MonthRemaining, OverdueTotal;
+    private int propertyCount, roomCount, rentedCount, vacantCount;
+    private List<Bill> pending = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 进入时自动补齐本月应出账单（幂等）
+        await Billing.EnsureBillsThroughAsync(today);
+
+        var bills = await Db.Bills.Include(b => b.Room).Include(b => b.Tenant).AsNoTracking().ToListAsync();
+        var monthBills = bills
+            .Where(b => b.PeriodStart.Year == today.Year && b.PeriodStart.Month == today.Month).ToList();
+
+        MonthTotal = monthBills.Sum(b => b.TotalAmount);
+        MonthPaid = monthBills.Sum(b => b.PaidAmount);
+        MonthRemaining = monthBills.Sum(b => b.RemainingAmount);
+        OverdueTotal = bills.Where(b => b.IsOverdue(today)).Sum(b => b.RemainingAmount);
+
+        propertyCount = await Db.Properties.CountAsync();
+        roomCount = await Db.Rooms.CountAsync(r => !r.IsArchived);
+        var activeRoomIds = await Db.Leases.Where(l => l.Status == LeaseStatus.Active)
+            .Select(l => l.RoomId).Distinct().ToListAsync();
+        rentedCount = activeRoomIds.Count;
+        vacantCount = Math.Max(0, roomCount - rentedCount);
+
+        pending = monthBills.Where(b => b.Status != BillStatus.Paid)
+            .OrderBy(b => b.DueDate).Take(30).ToList();
+    }
+}

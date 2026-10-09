@@ -1,0 +1,153 @@
+@page "/tenants"
+@rendermode InteractiveServer
+@inject AppDbContext Db
+
+<PageTitle>租客管理</PageTitle>
+
+<div class="page-head">
+    <h1>租客</h1>
+</div>
+
+<div class="card p-3 mb-3">
+    <strong class="d-block mb-2">@(editingId is null ? "新增租客" : "编辑租客")</strong>
+    <div class="row g-2">
+        <div class="col-6 col-md-3">
+            <label class="form-label">姓名 *</label>
+            <input class="form-control" @bind="form.Name" placeholder="租客姓名" />
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">手机号</label>
+            <input class="form-control" @bind="form.Phone" placeholder="用于发账单时联系" />
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">身份证号</label>
+            <input class="form-control" @bind="form.IdCard" placeholder="选填" />
+        </div>
+        <div class="col-12 col-md-3 d-flex align-items-end gap-2">
+            <button class="btn btn-brand" @onclick="Save">@(editingId is null ? "添加" : "保存")</button>
+            @if (editingId is not null)
+            {
+                <button class="btn btn-outline-secondary" @onclick="ResetForm">取消</button>
+            }
+        </div>
+        <div class="col-12">
+            <label class="form-label">备注</label>
+            <input class="form-control" @bind="form.Note" placeholder="选填" />
+        </div>
+    </div>
+    @if (Error is not null)
+    {
+        <div class="alert alert-danger py-2 px-3 mt-2 mb-0">@Error</div>
+    }
+</div>
+
+<div class="table-wrap">
+    <table class="data">
+        <thead>
+            <tr><th>姓名</th><th>手机号</th><th>身份证号</th><th>在租房</th><th>备注</th><th class="num">操作</th></tr>
+        </thead>
+        <tbody>
+            @if (items.Count == 0)
+            {
+                <tr><td colspan="6" class="empty no-label">还没有租客</td></tr>
+            }
+            @foreach (var t in items)
+            {
+                var activeRoom = t.Leases.FirstOrDefault(l => l.Status == LeaseStatus.Active)?.Room?.Name;
+                <tr>
+                    <td data-label="姓名" class="fw-semibold">@t.Name</td>
+                    <td data-label="手机号">@(t.Phone ?? "—")</td>
+                    <td data-label="身份证号">@(t.IdCard ?? "—")</td>
+                    <td data-label="在租房">@(activeRoom is not null ? $"在租 · {activeRoom}" : "—")</td>
+                    <td data-label="备注">@(t.Note ?? "—")</td>
+                    <td data-label="操作" class="num no-label">
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => Edit(t)">编辑</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(t)">删除</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<Tenant> items = new();
+    private int? editingId;
+    private string? Error;
+    private FormModel form = new();
+
+    private class FormModel
+    {
+        public string Name { get; set; } = "";
+        public string? Phone { get; set; }
+        public string? IdCard { get; set; }
+        public string? Note { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        items = await Db.Tenants
+            .Include(t => t.Leases).ThenInclude(l => l.Room)
+            .OrderByDescending(t => t.Id).AsNoTracking().ToListAsync();
+    }
+
+    private void Edit(Tenant t)
+    {
+        editingId = t.Id;
+        form = new FormModel { Name = t.Name, Phone = t.Phone, IdCard = t.IdCard, Note = t.Note };
+        Error = null;
+    }
+
+    private void ResetForm()
+    {
+        editingId = null;
+        form = new FormModel();
+        Error = null;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(form.Name)) { Error = "请填写姓名。"; return; }
+
+        if (editingId is null)
+        {
+            Db.Tenants.Add(new Tenant
+            {
+                Name = form.Name.Trim(), Phone = form.Phone, IdCard = form.IdCard, Note = form.Note,
+            });
+        }
+        else
+        {
+            var t = await Db.Tenants.FindAsync(editingId);
+            if (t is not null)
+            {
+                t.Name = form.Name.Trim();
+                t.Phone = form.Phone;
+                t.IdCard = form.IdCard;
+                t.Note = form.Note;
+            }
+        }
+        await Db.SaveChangesAsync();
+        ResetForm();
+        await LoadAsync();
+    }
+
+    private async Task Delete(Tenant t)
+    {
+        var leaseCount = await Db.Leases.CountAsync(l => l.TenantId == t.Id);
+        if (leaseCount > 0)
+        {
+            Error = $"「{t.Name}」关联了 {leaseCount} 条租约，不能删除（租客档案需随租约保留）。";
+            return;
+        }
+        var entity = await Db.Tenants.FindAsync(t.Id);
+        if (entity is not null)
+        {
+            Db.Tenants.Remove(entity);
+            await Db.SaveChangesAsync();
+        }
+        await LoadAsync();
+    }
+}

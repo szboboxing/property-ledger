@@ -1,0 +1,105 @@
+@page "/settings"
+@rendermode InteractiveServer
+@inject SettingsService SettingsSvc
+
+<PageTitle>设置</PageTitle>
+
+<div class="page-head"><h1>设置</h1></div>
+
+@if (Error is not null) { <div class="alert alert-danger py-2 px-3">@Error</div> }
+@if (Ok is not null) { <div class="alert alert-success py-2 px-3">@Ok</div> }
+
+<div class="card p-4 mb-3">
+    <div class="mb-3">
+        <label class="form-label">房东称呼 / 落款</label>
+        <input class="form-control" @bind="landlord" placeholder="如：王女士 / 李先生" />
+        <div class="section-hint">显示在账单图片顶部与落款。</div>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">收款提示语</label>
+        <input class="form-control" @bind="notice" placeholder="如：请在到期日前支付，转账后请告知，谢谢～" />
+        <div class="section-hint">显示在账单图片底部。</div>
+    </div>
+    <button class="btn btn-brand" @onclick="SaveText">保存基础信息</button>
+</div>
+
+<div class="card p-4">
+    <label class="form-label">收款二维码</label>
+    <div class="section-hint mb-2">
+        上传你的「微信收款码」或「支付宝收款码」图片，将显示在账单图片上，租客长按或扫码即可付款。建议上传微信收款码（与“发微信账单”场景一致）。
+    </div>
+
+    @if (qrDataUri is not null)
+    {
+        <div class="mb-3">
+            <img src="@qrDataUri" alt="收款码" style="width:180px;height:180px;object-fit:contain;border:1px solid var(--line);border-radius:12px" />
+        </div>
+    }
+
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+        <InputFile OnChange="OnQrSelected" accept="image/*" />
+        @if (qrDataUri is not null)
+        {
+            <button class="btn btn-outline-danger btn-sm" @onclick="RemoveQr">移除收款码</button>
+        }
+    </div>
+    <div class="section-hint mt-2">支持 PNG / JPG，建议正方形，大小不超过 5MB。</div>
+</div>
+
+@code {
+    private string? landlord;
+    private string? notice;
+    private string? qrDataUri;
+    private string? Error, Ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var s = await SettingsSvc.GetManyAsync(new[]
+        {
+            SettingKeys.LandlordName, SettingKeys.PaymentNotice, SettingKeys.PayQrCode,
+        });
+        landlord = s.GetValueOrDefault(SettingKeys.LandlordName) ?? "";
+        notice = s.GetValueOrDefault(SettingKeys.PaymentNotice) ?? "";
+        qrDataUri = s.GetValueOrDefault(SettingKeys.PayQrCode);
+    }
+
+    private async Task SaveText()
+    {
+        Error = Ok = null;
+        await SettingsSvc.SetAsync(SettingKeys.LandlordName, landlord?.Trim());
+        await SettingsSvc.SetAsync(SettingKeys.PaymentNotice, notice?.Trim());
+        Ok = "已保存。";
+    }
+
+    private async Task OnQrSelected(InputFileChangeEventArgs e)
+    {
+        Error = Ok = null;
+        var file = e.File;
+        if (file is null) return;
+        if (file.Size > 5 * 1024 * 1024) { Error = "图片不能超过 5MB。"; return; }
+
+        try
+        {
+            await using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var bytes = ms.ToArray();
+            var mime = file.ContentType;
+            if (string.IsNullOrEmpty(mime) || !mime.StartsWith("image/")) mime = "image/png";
+            qrDataUri = $"data:{mime};base64,{Convert.ToBase64String(bytes)}";
+            await SettingsSvc.SetAsync(SettingKeys.PayQrCode, qrDataUri);
+            Ok = "收款码已保存，之后生成的账单图片会带上该二维码。";
+        }
+        catch (Exception ex)
+        {
+            Error = "上传失败：" + ex.Message;
+        }
+    }
+
+    private async Task RemoveQr()
+    {
+        qrDataUri = null;
+        await SettingsSvc.SetAsync(SettingKeys.PayQrCode, null);
+        Ok = "收款码已移除。";
+    }
+}

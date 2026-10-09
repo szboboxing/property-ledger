@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: propertyledger-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: property
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-property}
+      POSTGRES_DB: propertyledger
+      TZ: Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U property -d propertyledger"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - internal
+
+  web:
+    image: ghcr.io/szboboxing/property-ledger:latest
+    container_name: propertyledger-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Default: Host=db;Port=5432;Database=propertyledger;Username=property;Password=${DB_PASSWORD:-property}
+      TZ: Asia/Shanghai
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+
+networks:
+  internal:

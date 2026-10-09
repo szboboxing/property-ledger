@@ -1,0 +1,22 @@
+@* 账单状态徽章：逾期优先于未付 *@
+@if (Bill.Status == BillStatus.Paid)
+{
+    <span class="badge-state st-paid">已结清</span>
+}
+else if (Bill.IsOverdue(Today))
+{
+    <span class="badge-state st-overdue">逾期 @(Today - Bill.DueDate).Days 天</span>
+}
+else if (Bill.Status == BillStatus.Partial)
+{
+    <span class="badge-state st-partial">部分已付</span>
+}
+else
+{
+    <span class="badge-state st-unpaid">未付</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public Bill Bill { get; set; } = default!;
+    [Parameter] public DateTime Today { get; set; } = DateTime.Today;
+}

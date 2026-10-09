@@ -1,0 +1,148 @@
+@page "/properties"
+@rendermode InteractiveServer
+@inject AppDbContext Db
+
+<PageTitle>物业管理</PageTitle>
+
+<div class="page-head">
+    <h1>物业</h1>
+</div>
+
+<div class="card p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong>@(editingId is null ? "新增物业" : "编辑物业")</strong>
+    </div>
+    <div class="row g-2">
+        <div class="col-12 col-md-4">
+            <label class="form-label">物业名称 *</label>
+            <input class="form-control" @bind="form.Name" placeholder="如：阳光花园" />
+        </div>
+        <div class="col-12 col-md-5">
+            <label class="form-label">地址</label>
+            <input class="form-control" @bind="form.Address" placeholder="选填" />
+        </div>
+        <div class="col-12 col-md-3 d-flex align-items-end gap-2">
+            <button class="btn btn-brand" @onclick="Save">@(editingId is null ? "添加" : "保存")</button>
+            @if (editingId is not null)
+            {
+                <button class="btn btn-outline-secondary" @onclick="ResetForm">取消</button>
+            }
+        </div>
+        <div class="col-12">
+            <label class="form-label">备注</label>
+            <input class="form-control" @bind="form.Note" placeholder="选填" />
+        </div>
+    </div>
+    @if (Error is not null)
+    {
+        <div class="alert alert-danger py-2 px-3 mt-2 mb-0">@Error</div>
+    }
+</div>
+
+<div class="table-wrap">
+    <table class="data">
+        <thead>
+            <tr><th>名称</th><th>地址</th><th>备注</th><th class="num">房间数</th><th class="num">操作</th></tr>
+        </thead>
+        <tbody>
+            @if (items.Count == 0)
+            {
+                <tr><td colspan="5" class="empty no-label">还没有物业，先在上面添加一个</td></tr>
+            }
+            @foreach (var p in items)
+            {
+                <tr>
+                    <td data-label="名称" class="fw-semibold">@p.Name</td>
+                    <td data-label="地址">@(p.Address ?? "—")</td>
+                    <td data-label="备注">@(p.Note ?? "—")</td>
+                    <td data-label="房间数" class="num">@p.Rooms.Count</td>
+                    <td data-label="操作" class="num no-label">
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => Edit(p)">编辑</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(p)">删除</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<Property> items = new();
+    private int? editingId;
+    private string? Error;
+    private FormModel form = new();
+
+    private class FormModel
+    {
+        public string Name { get; set; } = "";
+        public string? Address { get; set; }
+        public string? Note { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        items = await Db.Properties.Include(p => p.Rooms).OrderBy(p => p.Id).AsNoTracking().ToListAsync();
+    }
+
+    private void Edit(Property p)
+    {
+        editingId = p.Id;
+        form = new FormModel { Name = p.Name, Address = p.Address, Note = p.Note };
+        Error = null;
+    }
+
+    private void ResetForm()
+    {
+        editingId = null;
+        form = new FormModel();
+        Error = null;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(form.Name))
+        {
+            Error = "请填写物业名称。";
+            return;
+        }
+
+        if (editingId is null)
+        {
+            Db.Properties.Add(new Property { Name = form.Name.Trim(), Address = form.Address, Note = form.Note });
+        }
+        else
+        {
+            var p = await Db.Properties.FindAsync(editingId);
+            if (p is not null)
+            {
+                p.Name = form.Name.Trim();
+                p.Address = form.Address;
+                p.Note = form.Note;
+            }
+        }
+        await Db.SaveChangesAsync();
+        ResetForm();
+        await LoadAsync();
+    }
+
+    private async Task Delete(Property p)
+    {
+        if (p.Rooms.Count > 0)
+        {
+            Error = $"「{p.Name}」下还有 {p.Rooms.Count} 个房间，请先删除或迁移房间。";
+            return;
+        }
+        var entity = await Db.Properties.FindAsync(p.Id);
+        if (entity is not null)
+        {
+            Db.Properties.Remove(entity);
+            await Db.SaveChangesAsync();
+        }
+        await LoadAsync();
+    }
+}

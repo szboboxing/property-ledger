@@ -1,0 +1,17 @@
+@* 导航链接集合，桌面横排与移动端折叠菜单共用 *@
+<NavLink class="nav-pill" href="" Match="NavLinkMatch.All">仪表盘</NavLink>
+<NavLink class="nav-pill" href="bills">账单</NavLink>
+<NavLink class="nav-pill" href="leases">租约</NavLink>
+<NavLink class="nav-pill" href="rooms">房间</NavLink>
+<NavLink class="nav-pill" href="tenants">租客</NavLink>
+<NavLink class="nav-pill" href="properties">物业</NavLink>
+<NavLink class="nav-pill" href="settings">设置</NavLink>
+@if (IsAdmin)
+{
+    <NavLink class="nav-pill" href="users">用户</NavLink>
+}
+<a class="nav-pill d-md-none" href="/logout">退出登录</a>
+
+@code {
+    [Parameter] public bool IsAdmin { get; set; }
+}

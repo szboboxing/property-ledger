@@ -1,0 +1,43 @@
+@inherits LayoutComponentBase
+
+<AuthorizeView>
+    <Authorized>
+        <header class="app-topbar">
+            <a class="app-brand" href="/">物业管理小工具</a>
+
+            <details class="app-burger d-md-none">
+                <summary aria-label="菜单">☰</summary>
+                <nav class="app-links app-links-mobile">
+                    <NavMenuLinks IsAdmin='@(context.User.IsInRole("Admin"))' />
+                </nav>
+            </details>
+
+            <nav class="app-links app-links-desktop d-none d-md-flex">
+                <NavMenuLinks IsAdmin='@(context.User.IsInRole("Admin"))' />
+            </nav>
+
+            <div class="app-user d-none d-md-flex">
+                <span class="me-3">@context.User.Identity?.Name</span>
+                <a class="btn btn-sm btn-outline-secondary" href="/logout">退出</a>
+            </div>
+        </header>
+
+        <main class="app-main">
+            <div class="app-container">
+                @Body
+            </div>
+        </main>
+    </Authorized>
+    <NotAuthorized>
+        <main class="app-main">
+            <div class="app-container">
+                @Body
+            </div>
+        </main>
+    </NotAuthorized>
+</AuthorizeView>
+
+<div id="blazor-error-ui" data-nosnippet>
+    发生了错误。<a href="." class="reload">重新加载</a>
+    <span class="dismiss">🗙</span>
+</div>

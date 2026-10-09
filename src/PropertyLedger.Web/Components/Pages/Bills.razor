@@ -1,0 +1,361 @@
+@page "/bills"
+@rendermode InteractiveServer
+@inject AppDbContext Db
+@inject BillingService Billing
+
+<PageTitle>账单与收款</PageTitle>
+
+<div class="page-head">
+    <h1>账单</h1>
+    <button class="btn btn-outline-primary btn-sm" @onclick="RefreshAll">补生成 / 刷新账单</button>
+</div>
+
+<div class="card p-3 mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-6 col-md-3">
+            <label class="form-label">账期月份</label>
+            <input type="month" class="form-control" @bind="monthDate" @bind:format="yyyy-MM" disabled="@showAll" />
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">收款状态</label>
+            <select class="form-select" @bind="statusFilter">
+                <option value="all">全部</option>
+                <option value="unpaid">未付</option>
+                <option value="partial">部分已付</option>
+                <option value="paid">已结清</option>
+                <option value="overdue">已逾期</option>
+            </select>
+        </div>
+        <div class="col-12 col-md-3">
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="showAll" @bind="showAll" />
+                <label class="form-check-label" for="showAll">显示全部月份</label>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Error is not null)
+{
+    <div class="alert alert-danger py-2 px-3">@Error</div>
+}
+@if (Ok is not null)
+{
+    <div class="alert alert-success py-2 px-3">@Ok</div>
+}
+
+<div class="table-wrap">
+    <table class="data">
+        <thead>
+            <tr><th>房间 / 租客</th><th>账期</th><th>到期</th><th class="num">应收</th><th class="num">已收</th><th class="num">剩余</th><th>状态</th><th class="num">操作</th></tr>
+        </thead>
+        <tbody>
+            @if (filtered.Count == 0)
+            {
+                <tr><td colspan="8" class="empty no-label">当前条件下没有账单。先在「租约」页签订生效租约。</td></tr>
+            }
+            @foreach (var b in filtered)
+            {
+                <tr>
+                    <td data-label="房间/租客">
+                        <div class="fw-semibold">@b.Room?.Property?.Name · @b.Room?.Name</div>
+                        <div class="section-hint">@b.Tenant?.Name @(b.Tenant?.Phone is not null ? " · " + b.Tenant.Phone : "")</div>
+                    </td>
+                    <td data-label="账期">
+                        @b.PeriodStart.ToString("yyyy-MM")
+                        @if (b.PeriodEnd.Year * 12 + b.PeriodEnd.Month > b.PeriodStart.Year * 12 + b.PeriodStart.Month)
+                        {
+                            <span class="badge-state st-neutral ms-1">季</span>
+                        }
+                    </td>
+                    <td data-label="到期">@b.DueDate.ToString("MM-dd")</td>
+                    <td data-label="应收" class="num">¥@b.TotalAmount.ToString("0.00")</td>
+                    <td data-label="已收" class="num">¥@b.PaidAmount.ToString("0.00")</td>
+                    <td data-label="剩余" class="num fw-semibold @(b.RemainingAmount>0?"text-danger":"")">¥@b.RemainingAmount.ToString("0.00")</td>
+                    <td data-label="状态"><StatusBadge Bill="b" Today="today" /></td>
+                    <td data-label="操作" class="num no-label">
+                        <button class="btn btn-sm btn-brand" @onclick="() => Open(b.Id)">记账</button>
+                        <a class="btn btn-sm btn-outline-secondary" href="@($"/bills/{b.Id}/bill.png")" target="_blank" rel="noopener">账单图</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@* ── 账单详情 / 收款面板 ── *@
+@if (selected is not null)
+{
+    <div class="card p-3 mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <strong>@selected.Room?.Name · @selected.Tenant?.Name · @selected.PeriodStart.ToString("yyyy-MM") 账单</strong>
+            <button class="btn-close" @onclick="() => selected = null" aria-label="关闭"></button>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-12 col-lg-7">
+                <div class="fw-semibold mb-2">费用明细</div>
+                <div class="table-wrap mb-3">
+                    <table class="data">
+                        <thead><tr><th>项目</th><th class="num">金额</th><th class="num">删除</th></tr></thead>
+                        <tbody>
+                            <tr>
+                                <td data-label="项目">租金 @(selected.PeriodEnd.Year * 12 + selected.PeriodEnd.Month > selected.PeriodStart.Year * 12 + selected.PeriodStart.Month ? "（三个月）" : "")</td>
+                                <td data-label="金额" class="num">¥@selected.RentAmount.ToString("0.00")</td>
+                                <td data-label="删除" class="num no-label"><span class="section-hint">—</span></td>
+                            </tr>
+                            @foreach (var it in selected.Items)
+                            {
+                                <tr>
+                                    <td data-label="项目">@it.Name @(it.Remark is not null ? $"（{it.Remark}）" : "")</td>
+                                    <td data-label="金额" class="num">¥@it.Amount.ToString("0.00")</td>
+                                    <td data-label="删除" class="num no-label">
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveItem(it.Id)">删</button>
+                                    </td>
+                                </tr>
+                            }
+                            <tr>
+                                <td data-label="项目" class="fw-semibold">应收合计</td>
+                                <td data-label="金额" class="num fw-bold">¥@selected.TotalAmount.ToString("0.00")</td>
+                                <td class="no-label"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="fw-semibold mb-2">添加杂费（水费 / 电费 / 物业费 / 网费等）</div>
+                <div class="row g-2">
+                    <div class="col-5"><input class="form-control" placeholder="名称" @bind="newItemName" /></div>
+                    <div class="col-4"><input type="number" step="0.01" class="form-control" placeholder="金额" @bind="newItemAmount" /></div>
+                    <div class="col-3"><button class="btn btn-outline-primary w-100" @onclick="AddItem">添加</button></div>
+                    <div class="col-12"><input class="form-control" placeholder="备注（选填，如 水表读数 123）" @bind="newItemRemark" /></div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-5">
+                <div class="fw-semibold mb-2">收款记录</div>
+                <div class="mb-2">
+                    <span>应收 <b class="money">¥@selected.TotalAmount.ToString("0.00")</b></span>
+                    <span class="mx-2">已收 <b class="money text-success">¥@selected.PaidAmount.ToString("0.00")</b></span>
+                    <span>剩余 <b class="money text-danger">¥@selected.RemainingAmount.ToString("0.00")</b></span>
+                </div>
+                <div class="table-wrap mb-3">
+                    <table class="data">
+                        <thead><tr><th>日期</th><th>方式</th><th class="num">金额</th><th class="num">撤销</th></tr></thead>
+                        <tbody>
+                            @if (selected.Payments.Count == 0)
+                            {
+                                <tr><td colspan="4" class="empty no-label py-3">暂无收款</td></tr>
+                            }
+                            @foreach (var p in selected.Payments.OrderByDescending(p => p.PaidAt))
+                            {
+                                <tr>
+                                    <td data-label="日期">@p.PaidAt.ToString("MM-dd")</td>
+                                    <td data-label="方式">@MethodText(p.Method)</td>
+                                    <td data-label="金额" class="num">¥@p.Amount.ToString("0.00")</td>
+                                    <td data-label="撤销" class="num no-label">
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemovePayment(p.Id)">撤销</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (selected.RemainingAmount > 0)
+                {
+                    <div class="fw-semibold mb-2">登记收款（支持部分收款）</div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label">收款金额</label>
+                            <input type="number" step="0.01" class="form-control" @bind="payAmount" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">收款日期</label>
+                            <input type="date" class="form-control" @bind="payDate" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">方式</label>
+                            <select class="form-select" @bind="payMethod">
+                                <option value="@PaymentMethod.WeChat">微信</option>
+                                <option value="@PaymentMethod.Alipay">支付宝</option>
+                                <option value="@PaymentMethod.Bank">银行转账</option>
+                                <option value="@PaymentMethod.Cash">现金</option>
+                                <option value="@PaymentMethod.Other">其他</option>
+                            </select>
+                        </div>
+                        <div class="col-6 d-flex align-items-end">
+                            <button class="btn btn-brand w-100" @onclick="AddPayment">确认收款</button>
+                        </div>
+                        <div class="col-12 d-flex gap-2 flex-wrap">
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => payAmount = selected.RemainingAmount">填入剩余金额</button>
+                            <a class="btn btn-sm btn-outline-primary" href="@($"/bills/{selected.Id}/bill.png")" target="_blank" rel="noopener">下载账单图片（发微信）</a>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-success py-2 px-3 mb-2">该账单已结清。</div>
+                    <a class="btn btn-sm btn-outline-primary" href="@($"/bills/{selected.Id}/bill.png")" target="_blank" rel="noopener">下载账单图片（发微信）</a>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DateTime today = DateTime.Today;
+    private List<Bill> all = new();
+    private Bill? selected;
+
+    private DateTime monthDate = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private bool showAll = false;
+    private string statusFilter = "all";
+
+    // 收款表单
+    private decimal payAmount;
+    private DateTime payDate = DateTime.Today;
+    private PaymentMethod payMethod = PaymentMethod.WeChat;
+
+    // 杂费表单
+    private string? newItemName;
+    private decimal newItemAmount;
+    private string? newItemRemark;
+
+    private string? Error, Ok;
+
+    private List<Bill> filtered => ApplyFilter();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Billing.EnsureBillsThroughAsync(today);
+        await LoadAsync();
+    }
+
+    private List<Bill> ApplyFilter()
+    {
+        IEnumerable<Bill> q = all;
+        if (!showAll)
+        {
+            q = q.Where(b => b.PeriodStart.Year == monthDate.Year && b.PeriodStart.Month == monthDate.Month);
+        }
+        q = statusFilter switch
+        {
+            "unpaid" => q.Where(b => b.Status == BillStatus.Unpaid && !b.IsOverdue(today)),
+            "partial" => q.Where(b => b.Status == BillStatus.Partial),
+            "paid" => q.Where(b => b.Status == BillStatus.Paid),
+            "overdue" => q.Where(b => b.IsOverdue(today)),
+            _ => q,
+        };
+        return q.OrderByDescending(b => b.PeriodStart).ThenBy(b => b.DueDate).ToList();
+    }
+
+    private async Task LoadAsync()
+    {
+        all = await Db.Bills
+            .Include(b => b.Room).ThenInclude(r => r!.Property)
+            .Include(b => b.Tenant)
+            .Include(b => b.Items)
+            .Include(b => b.Payments)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+
+    private async Task RefreshAll()
+    {
+        await RunSafe(async () =>
+        {
+            await Billing.EnsureBillsThroughAsync(today);
+            await LoadAsync();
+            Ok = "账单已刷新。";
+            return true;
+        });
+    }
+
+    private async Task Open(int id)
+    {
+        await LoadAsync();
+        selected = all.FirstOrDefault(b => b.Id == id);
+        if (selected is not null)
+        {
+            payAmount = selected.RemainingAmount;
+            payDate = DateTime.Today;
+            newItemName = null; newItemAmount = 0; newItemRemark = null;
+        }
+        Error = Ok = null;
+    }
+
+    private async Task AddPayment()
+    {
+        if (selected is null) return;
+        await RunSafe(async () =>
+        {
+            await Billing.RecordPaymentAsync(selected.Id, payAmount, payMethod, payDate, null);
+            return true;
+        });
+        if (Error is null) { await Open(selected.Id); Ok = "收款已登记。"; }
+    }
+
+    private async Task RemovePayment(int paymentId)
+    {
+        if (selected is null) return;
+        await RunSafe(async () => { await Billing.DeletePaymentAsync(paymentId); return true; });
+        if (Error is null) { await Open(selected.Id); Ok = "收款已撤销。"; }
+    }
+
+    private async Task AddItem()
+    {
+        if (selected is null) return;
+        if (string.IsNullOrWhiteSpace(newItemName) || newItemAmount <= 0)
+        {
+            Error = "请填写杂费名称且金额大于 0。"; return;
+        }
+        await RunSafe(async () =>
+        {
+            Db.BillItems.Add(new BillItem
+            {
+                BillId = selected.Id,
+                Name = newItemName!.Trim(),
+                Amount = newItemAmount,
+                Remark = newItemRemark,
+            });
+            await Db.SaveChangesAsync();
+            await Billing.RecalculateBillAsync(selected.Id);
+            return true;
+        });
+        if (Error is null) { await Open(selected.Id); Ok = "杂费已添加。"; }
+    }
+
+    private async Task RemoveItem(int itemId)
+    {
+        if (selected is null) return;
+        await RunSafe(async () =>
+        {
+            var item = await Db.BillItems.FindAsync(itemId);
+            if (item is not null)
+            {
+                Db.BillItems.Remove(item);
+                await Db.SaveChangesAsync();
+                await Billing.RecalculateBillAsync(selected.Id);
+            }
+            return true;
+        });
+        if (Error is null) { await Open(selected.Id); Ok = "杂费已删除。"; }
+    }
+
+    private async Task RunSafe(Func<Task<bool>> action)
+    {
+        Error = Ok = null;
+        try { await action(); }
+        catch (DomainException ex) { Error = ex.Message; }
+    }
+
+    private static string MethodText(PaymentMethod m) => m switch
+    {
+        PaymentMethod.WeChat => "微信",
+        PaymentMethod.Alipay => "支付宝",
+        PaymentMethod.Bank => "转账",
+        PaymentMethod.Cash => "现金",
+        _ => "其他",
+    };
+}

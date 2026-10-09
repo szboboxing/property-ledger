@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PropertyLedger.Core/PropertyLedger.Core.csproj" />
+    <Project Path="src/PropertyLedger.Web/PropertyLedger.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PropertyLedger.Tests/PropertyLedger.Tests.csproj" />
+  </Folder>
+</Solution>

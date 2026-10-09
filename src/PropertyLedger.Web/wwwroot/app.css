@@ -1,0 +1,135 @@
+:root {
+    --brand: #0f766e;
+    --brand-dark: #115e59;
+    --brand-soft: #ccfbf1;
+    --bg: #f4f6f8;
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --danger: #dc2626;
+    --warn: #d97706;
+    --ok: #16a34a;
+}
+
+html, body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+}
+
+a { text-decoration: none; }
+.btn-brand { background: var(--brand); color: #fff; border-color: var(--brand); }
+.btn-brand:hover, .btn-brand:focus { background: var(--brand-dark); border-color: var(--brand-dark); color: #fff; }
+.text-brand { color: var(--brand) !important; }
+
+/* ── 顶栏 ── */
+.app-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--brand);
+    color: #fff;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+}
+.app-brand { color: #fff; font-weight: 700; font-size: 1.15rem; white-space: nowrap; }
+.app-brand:hover { color: #fff; }
+.app-links { gap: 4px; align-items: center; }
+.app-links-desktop { margin-left: 12px; flex: 1; flex-wrap: wrap; }
+.app-user { align-items: center; }
+.app-user .btn-outline-secondary { color: #fff; border-color: rgba(255,255,255,.6); }
+.app-user .btn-outline-secondary:hover { background: rgba(255,255,255,.15); color: #fff; }
+
+.nav-pill {
+    color: rgba(255,255,255,.88);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: .92rem;
+    white-space: nowrap;
+}
+.nav-pill:hover { background: rgba(255,255,255,.14); color: #fff; }
+.nav-pill.active { background: #fff; color: var(--brand-dark); font-weight: 600; }
+
+/* 移动端汉堡 */
+.app-burger { margin-left: auto; position: relative; }
+.app-burger > summary {
+    list-style: none; cursor: pointer; font-size: 1.4rem; line-height: 1;
+    padding: 2px 10px; border-radius: 8px;
+}
+.app-burger > summary::-webkit-details-marker { display: none; }
+.app-burger > summary:hover { background: rgba(255,255,255,.14); }
+.app-links-mobile {
+    display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+    position: absolute; right: 0; top: 120%;
+    background: var(--brand-dark); border-radius: 10px; padding: 8px;
+    min-width: 180px; box-shadow: 0 10px 30px rgba(0,0,0,.25); z-index: 1040;
+}
+.app-links-mobile .nav-pill { border-radius: 8px; }
+
+/* ── 主体 ── */
+.app-main { padding: 16px 0 48px; }
+.app-container { max-width: 1080px; margin: 0 auto; padding: 0 14px; }
+
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 2px 16px; flex-wrap: wrap; }
+.page-head h1 { font-size: 1.4rem; font-weight: 700; margin: 0; }
+
+.card { border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.card-title { font-weight: 700; }
+
+/* 统计卡 */
+.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+@media (min-width: 768px) { .stat-grid { grid-template-columns: repeat(4, 1fr); } }
+.stat { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.stat .label { color: var(--muted); font-size: .82rem; }
+.stat .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+.stat .value.danger { color: var(--danger); }
+.stat .value.ok { color: var(--ok); }
+.stat .value.warn { color: var(--warn); }
+
+/* 状态徽章 */
+.badge-state { padding: 3px 10px; border-radius: 999px; font-size: .76rem; font-weight: 600; display: inline-block; }
+.st-unpaid { background: #fef2f2; color: var(--danger); }
+.st-partial { background: #fffbeb; color: var(--warn); }
+.st-paid { background: #f0fdf4; color: var(--ok); }
+.st-overdue { background: var(--danger); color: #fff; }
+.st-neutral { background: #f3f4f6; color: var(--muted); }
+
+/* 表格（桌面） */
+.table-wrap { background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+table.data { width: 100%; margin: 0; }
+table.data thead th { background: #f9fafb; color: var(--muted); font-weight: 600; font-size: .82rem; padding: 10px 12px; white-space: nowrap; }
+table.data tbody td { padding: 10px 12px; vertical-align: middle; border-top: 1px solid var(--line); }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* 移动端：表格变卡片 */
+@media (max-width: 767px) {
+    table.data thead { display: none; }
+    table.data, table.data tbody, table.data tr, table.data td { display: block; width: 100%; }
+    table.data tr { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; background: #fff; padding: 4px 0; }
+    table.data td { border: none !important; padding: 6px 14px; display: flex; justify-content: space-between; gap: 14px; text-align: right; }
+    table.data td::before { content: attr(data-label); color: var(--muted); font-size: .82rem; text-align: left; }
+    table.data td.no-label::before { content: ""; }
+    .table-wrap { background: transparent; border: none; }
+}
+
+.form-label { font-weight: 600; font-size: .9rem; margin-bottom: 4px; }
+.section-hint { color: var(--muted); font-size: .86rem; }
+.money { font-variant-numeric: tabular-nums; }
+.empty { text-align: center; color: var(--muted); padding: 40px 0; }
+
+/* 登录页 */
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; background: linear-gradient(160deg, #f0fdfa, #ecfeff); }
+.login-card { width: 100%; max-width: 380px; background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 32px 28px; box-shadow: 0 20px 50px rgba(15,118,110,.12); }
+.login-card h1 { font-size: 1.35rem; font-weight: 700; text-align: center; color: var(--brand-dark); }
+.login-card .sub { text-align: center; color: var(--muted); font-size: .85rem; margin-bottom: 22px; }
+
+.route-loading { padding: 40px; text-align: center; color: var(--muted); }
+
+#blazor-error-ui {
+    background: #fff7e6; bottom: 0; box-shadow: 0 -1px 6px rgba(0,0,0,.12);
+    display: none; left: 0; padding: 10px 14px; position: fixed; width: 100%; z-index: 2000; font-size: .9rem;
+}
+#blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: 12px; top: 8px; }

@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/out/
+**/.git
+**/.gitignore
+**/.vs
+**/data/
+**/node_modules/
+tests/
+*.md
+.dockerignore
+Dockerfile
+docker-compose.yml

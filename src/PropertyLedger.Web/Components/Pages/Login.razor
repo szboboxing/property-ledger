@@ -1,0 +1,96 @@
+@page "/login"
+@layout BlankLayout
+@attribute [AllowAnonymous]
+@inject AuthService Auth
+@inject NavigationManager Navigation
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+
+<div class="login-wrap">
+    <div class="login-card">
+        <h1>物业管理小工具</h1>
+        <div class="sub">请登录后管理物业、租约与账单</div>
+
+        <EditForm Model="Input" FormName="login" OnValidSubmit="DoLogin">
+            <DataAnnotationsValidator />
+            <div class="mb-3">
+                <label class="form-label">账号</label>
+                <InputText class="form-control" @bind-Value="Input!.UserName" autocomplete="username" placeholder="账号" />
+            </div>
+            <div class="mb-2">
+                <label class="form-label">密码</label>
+                <InputText type="password" class="form-control" @bind-Value="Input!.Password" autocomplete="current-password" placeholder="密码" />
+            </div>
+
+            @if (Error is not null)
+            {
+                <div class="alert alert-danger py-2 px-3 mt-3 mb-2">@Error</div>
+            }
+
+            <button type="submit" class="btn btn-brand w-100 mt-3">登 录</button>
+        </EditForm>
+
+        <div class="section-hint text-center mt-3">首次使用默认账号 admin / admin123，请尽快修改密码</div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private LoginModel? Input { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private string? Error { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Input ??= new LoginModel();
+        // 已登录再访问登录页则直接进首页（仅静态 SSR 下可拿到 HttpContext）
+        if (HttpContext?.User?.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+    }
+
+    private async Task DoLogin()
+    {
+        var model = Input ?? new LoginModel();
+        var user = await Auth.ValidateAsync(model.UserName, model.Password);
+        if (user is null)
+        {
+            Error = "账号或密码错误，或账号已被停用。";
+            return;
+        }
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.Name, user.UserName),
+            new(ClaimTypes.GivenName, user.DisplayName),
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Role, user.IsAdmin ? "Admin" : "User"),
+        };
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var principal = new ClaimsPrincipal(identity);
+
+        if (HttpContext is not null)
+        {
+            await HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme, principal);
+            var dest = string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : ReturnUrl;
+            Navigation.NavigateTo(dest, forceLoad: true);
+        }
+    }
+
+    private sealed class LoginModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        public string UserName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Password { get; set; } = string.Empty;
+    }
+}
