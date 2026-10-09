@@ -1,4 +1,4 @@
-# 物业管理小工具 Property Ledger
+# 物业管理台账 Property Ledger
 
 房东记账工具：物业 → 房间 → 租客 → 租约 → 按月/季自动出账，支持自定义杂费（水电/物业/网费）、部分收款自动算剩余，一键生成中文账单图片（含收款二维码）用微信发给租客。
 
@@ -115,6 +115,13 @@ ghcr.io/szboboxing/property-ledger:latest
 推送 `v*.*` 标签触发 GitHub Actions：先跑测试，再多架构构建并推送 GHCR。
 
 ## 更新日志 Changelog
+
+### v1.2（2026-10-09）
+
+- 修复：容器部署下 `blazor.web.js` 404 导致页面无交互（添加/保存按钮全部无反应）——发布阶段补上 `MapStaticAssets()`，Dockerfile 去掉 publish `--no-restore`
+- 修复：HTML 响应增加 `Cache-Control: no-cache`，应用升级后浏览器不再引用被替换的旧资源
+- 更名：应用标题由"物业管理小工具"改为"物业管理台账"（登录页/侧边栏/顶栏/页面标题）
+- 兼容性加固：侧边栏定位改用全兼容写法，覆盖更多浏览器环境
 
 ### v1.1（2026-10-09）
 

@@ -25,7 +25,7 @@ a { text-decoration: none; }
 /* ── 应用外壳：桌面常驻侧边栏 + 手机抽屉 ── */
 .app-shell { min-height: 100vh; }
 .app-sidebar {
-    position: fixed; inset: 0 auto 0 0; width: 216px; z-index: 1040;
+    position: fixed; top: 0; bottom: 0; left: 0; width: 216px; z-index: 1040;
     background: linear-gradient(180deg, var(--brand) 0%, var(--brand-dark) 100%);
     color: #fff; display: flex; flex-direction: column;
     transform: translateX(-100%); transition: transform .18s ease;
@@ -55,7 +55,7 @@ a { text-decoration: none; }
 
 /* 手机抽屉开关（checkbox hack，纯 CSS） */
 .nav-toggle { display: none; }
-.nav-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1035; }
+.nav-backdrop { display: none; position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,.4); z-index: 1035; }
 .nav-toggle:checked ~ .nav-sidebar, .nav-toggle:checked ~ .app-sidebar { transform: none; }
 .nav-toggle:checked ~ .nav-backdrop { display: block; }
 

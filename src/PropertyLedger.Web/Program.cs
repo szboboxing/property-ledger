@@ -79,4 +79,19 @@ app.MapBillImageEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+// .NET 9+ 静态资源端点（含 _framework/blazor.web.js 等框架 JS，缺失会导致容器内交互失效）
+app.MapStaticAssets();
+
+// HTML 响应禁缓存：避免应用升级后浏览器仍持有旧页面、引用已被替换的资源
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.OnStarting(() =>
+    {
+        if (ctx.Response.ContentType?.StartsWith("text/html") == true)
+            ctx.Response.Headers.CacheControl = "no-cache";
+        return Task.CompletedTask;
+    });
+    await next();
+});
+
 app.Run();

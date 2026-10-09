@@ -6,7 +6,8 @@ COPY src/PropertyLedger.Core/PropertyLedger.Core.csproj src/PropertyLedger.Core/
 COPY src/PropertyLedger.Web/PropertyLedger.Web.csproj src/PropertyLedger.Web/
 RUN dotnet restore src/PropertyLedger.Web/PropertyLedger.Web.csproj
 COPY src/ src/
-RUN dotnet publish src/PropertyLedger.Web/PropertyLedger.Web.csproj -c Release -o /app/publish --no-restore
+# 注意：publish 不能加 --no-restore，否则 Linux 下不会产出 wwwroot/_framework/blazor.web.js，容器内交互全挂
+RUN dotnet publish src/PropertyLedger.Web/PropertyLedger.Web.csproj -c Release -o /app/publish
 
 # ── 运行阶段 ──
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
