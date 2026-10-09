@@ -1,17 +1,40 @@
-@* 导航链接集合，桌面横排与移动端折叠菜单共用 *@
-<NavLink class="nav-pill" href="" Match="NavLinkMatch.All">仪表盘</NavLink>
-<NavLink class="nav-pill" href="bills">账单</NavLink>
-<NavLink class="nav-pill" href="leases">租约</NavLink>
-<NavLink class="nav-pill" href="rooms">房间</NavLink>
-<NavLink class="nav-pill" href="tenants">租客</NavLink>
-<NavLink class="nav-pill" href="properties">物业</NavLink>
-<NavLink class="nav-pill" href="settings">设置</NavLink>
+@* 侧边栏导航：按登录者身份过滤（总管理员全部可见；普通用户按 feature 声明） *@
+@using System.Security.Claims
+
+<NavLink class="nav-item" href="/dashboard" Match="NavLinkMatch.All"><span class="ico">📊</span>仪表盘</NavLink>
+@if (Can("bills"))
+{
+    <NavLink class="nav-item" href="/bills"><span class="ico">💰</span>账单记账</NavLink>
+}
+@if (Can("leases"))
+{
+    <NavLink class="nav-item" href="/leases"><span class="ico">📄</span>租约</NavLink>
+}
+@if (Can("rooms"))
+{
+    <NavLink class="nav-item" href="/rooms"><span class="ico">🚪</span>房间</NavLink>
+}
+@if (Can("tenants"))
+{
+    <NavLink class="nav-item" href="/tenants"><span class="ico">👤</span>租客</NavLink>
+}
+@if (Can("properties"))
+{
+    <NavLink class="nav-item" href="/properties"><span class="ico">🏠</span>物业</NavLink>
+}
+@if (Can("settings"))
+{
+    <NavLink class="nav-item" href="/settings"><span class="ico">⚙️</span>设置</NavLink>
+}
 @if (IsAdmin)
 {
-    <NavLink class="nav-pill" href="users">用户</NavLink>
+    <NavLink class="nav-item" href="/users"><span class="ico">👥</span>用户管理</NavLink>
 }
-<a class="nav-pill d-md-none" href="/logout">退出登录</a>
 
 @code {
-    [Parameter] public bool IsAdmin { get; set; }
+    [Parameter] public ClaimsPrincipal? User { get; set; }
+
+    private bool IsAdmin => User?.IsInRole("Admin") == true;
+
+    private bool Can(string feature) => IsAdmin || User?.HasClaim("feature", feature) == true;
 }

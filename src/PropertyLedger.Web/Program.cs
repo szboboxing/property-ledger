@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using PropertyLedger.Core.Data;
+using PropertyLedger.Core.Models;
 using PropertyLedger.Core.Services;
 using PropertyLedger.Web.Components;
 using PropertyLedger.Web.Services;
@@ -35,7 +36,16 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromDays(30);
         options.SlidingExpiration = true;
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    // 功能级策略：总管理员全通过；普通用户按登录时颁发的 feature 声明判定
+    foreach (var (key, _) in UserFeatures.All)
+    {
+        options.AddPolicy($"Feature:{key}", policy => policy
+            .RequireAuthenticatedUser()
+            .RequireAssertion(ctx => ctx.User.IsInRole("Admin") || ctx.User.HasClaim("feature", key)));
+    }
+});
 builder.Services.AddCascadingAuthenticationState();
 
 // Add services to the container.

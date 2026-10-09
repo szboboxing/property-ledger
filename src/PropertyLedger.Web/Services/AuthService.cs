@@ -26,7 +26,8 @@ public class AuthService
     public async Task<List<AppUser>> ListAsync(CancellationToken ct = default) =>
         await _db.Users.OrderBy(u => u.Id).ToListAsync(ct);
 
-    public async Task<AppUser> CreateAsync(string userName, string displayName, string password, bool isAdmin, CancellationToken ct = default)
+    public async Task<AppUser> CreateAsync(string userName, string displayName, string password, bool isAdmin,
+        string? features = null, CancellationToken ct = default)
     {
         userName = userName.Trim();
         if (string.IsNullOrWhiteSpace(userName)) throw new DomainException("登录名不能为空。");
@@ -40,11 +41,21 @@ public class AuthService
             DisplayName = string.IsNullOrWhiteSpace(displayName) ? userName : displayName.Trim(),
             PasswordHash = PasswordHasher.Hash(password),
             IsAdmin = isAdmin,
+            Features = UserFeatures.Normalize(features),
             IsActive = true,
         };
         _db.Users.Add(user);
         await _db.SaveChangesAsync(ct);
         return user;
+    }
+
+    /// <summary>更新普通用户的功能权限（CSV；总管理员忽略）。</summary>
+    public async Task SetFeaturesAsync(int userId, string? features, CancellationToken ct = default)
+    {
+        var user = await _db.Users.FindAsync(new object[] { userId }, ct)
+                   ?? throw new DomainException("用户不存在。");
+        user.Features = UserFeatures.Normalize(features);
+        await _db.SaveChangesAsync(ct);
     }
 
     public async Task ChangePasswordAsync(int userId, string newPassword, CancellationToken ct = default)

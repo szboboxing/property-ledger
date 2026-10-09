@@ -8,6 +8,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-property}
       POSTGRES_DB: propertyledger
       TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:5432:5432"   # 仅本机可访问，便于宿主机开发调试
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

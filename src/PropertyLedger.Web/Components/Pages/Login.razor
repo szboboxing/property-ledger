@@ -1,3 +1,4 @@
+@page "/"
 @page "/login"
 @layout BlankLayout
 @attribute [AllowAnonymous]
@@ -49,10 +50,10 @@
     protected override void OnInitialized()
     {
         Input ??= new LoginModel();
-        // 已登录再访问登录页则直接进首页（仅静态 SSR 下可拿到 HttpContext）
+        // 已登录再访问登录页/首页则直接进仪表盘（仅静态 SSR 下可拿到 HttpContext）
         if (HttpContext?.User?.Identity?.IsAuthenticated == true)
         {
-            Navigation.NavigateTo("/", forceLoad: true);
+            Navigation.NavigateTo("/dashboard", forceLoad: true);
         }
     }
 
@@ -73,6 +74,12 @@
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Role, user.IsAdmin ? "Admin" : "User"),
         };
+        // 普通用户：按配置的功能颁发 feature 声明（总管理员全通过，无需声明）
+        if (!user.IsAdmin)
+        {
+            foreach (var f in UserFeatures.Parse(user.Features))
+                claims.Add(new Claim("feature", f));
+        }
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         var principal = new ClaimsPrincipal(identity);
 
@@ -80,7 +87,7 @@
         {
             await HttpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme, principal);
-            var dest = string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : ReturnUrl;
+            var dest = string.IsNullOrWhiteSpace(ReturnUrl) ? "/dashboard" : ReturnUrl;
             Navigation.NavigateTo(dest, forceLoad: true);
         }
     }

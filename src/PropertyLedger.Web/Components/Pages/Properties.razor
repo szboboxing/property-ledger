@@ -1,4 +1,5 @@
 @page "/properties"
+@attribute [Authorize(Policy = "Feature:properties")]
 @rendermode InteractiveServer
 @inject AppDbContext Db
 

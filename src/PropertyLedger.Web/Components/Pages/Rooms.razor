@@ -1,4 +1,5 @@
 @page "/rooms"
+@attribute [Authorize(Policy = "Feature:rooms")]
 @rendermode InteractiveServer
 @inject AppDbContext Db
 

@@ -2,31 +2,39 @@
 
 <AuthorizeView>
     <Authorized>
-        <header class="app-topbar">
-            <a class="app-brand" href="/">物业管理小工具</a>
+        @* 外壳：桌面常驻侧边栏；手机抽屉（checkbox hack，纯 CSS 展开收起） *@
+        <div class="app-shell">
+            <input type="checkbox" id="nav-toggle" class="nav-toggle" />
 
-            <details class="app-burger d-md-none">
-                <summary aria-label="菜单">☰</summary>
-                <nav class="app-links app-links-mobile">
-                    <NavMenuLinks IsAdmin='@(context.User.IsInRole("Admin"))' />
+            <aside class="app-sidebar">
+                <div class="sidebar-brand"><span class="ico">🏠</span>物业管理小工具</div>
+                <nav class="sidebar-nav">
+                    <NavMenuLinks User="context.User" />
                 </nav>
-            </details>
+                <div class="sidebar-foot">
+                    <div class="sidebar-user">
+                        <div class="name">@context.User.Identity?.Name</div>
+                        <div class="role">@(context.User.IsInRole("Admin") ? "总管理员" : "普通用户")</div>
+                    </div>
+                    <a class="sidebar-logout" href="/logout">退出登录</a>
+                </div>
+            </aside>
 
-            <nav class="app-links app-links-desktop d-none d-md-flex">
-                <NavMenuLinks IsAdmin='@(context.User.IsInRole("Admin"))' />
-            </nav>
+            <label for="nav-toggle" class="nav-backdrop" aria-label="关闭菜单"></label>
 
-            <div class="app-user d-none d-md-flex">
-                <span class="me-3">@context.User.Identity?.Name</span>
-                <a class="btn btn-sm btn-outline-secondary" href="/logout">退出</a>
+            <div class="app-body">
+                <header class="app-topbar">
+                    <label for="nav-toggle" class="burger" aria-label="打开菜单">☰</label>
+                    <span class="title">物业管理小工具</span>
+                </header>
+
+                <main class="app-main">
+                    <div class="app-container">
+                        @Body
+                    </div>
+                </main>
             </div>
-        </header>
-
-        <main class="app-main">
-            <div class="app-container">
-                @Body
-            </div>
-        </main>
+        </div>
     </Authorized>
     <NotAuthorized>
         <main class="app-main">

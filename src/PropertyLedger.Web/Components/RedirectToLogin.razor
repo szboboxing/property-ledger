@@ -4,10 +4,11 @@
 @code {
     protected override void OnInitialized()
     {
+        // 未授权访问受保护页面 → 跳到根路径的登录页，并带上回跳地址
         var returnUrl = Navigation.ToBaseRelativePath(Navigation.Uri);
-        var target = string.IsNullOrEmpty(returnUrl) || returnUrl.StartsWith("login", StringComparison.OrdinalIgnoreCase)
-            ? "login"
-            : $"login?returnUrl={Uri.EscapeDataString("/" + returnUrl)}";
+        var target = string.IsNullOrEmpty(returnUrl)
+            ? "/"
+            : $"?returnUrl={Uri.EscapeDataString("/" + returnUrl)}";
         Navigation.NavigateTo(target, forceLoad: true);
     }
 }

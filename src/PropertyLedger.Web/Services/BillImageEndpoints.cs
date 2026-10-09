@@ -54,6 +54,6 @@ public static class BillImageEndpoints
             var png = renderer.Render(view);
             var fileName = $"bill-{bill.PeriodStart:yyyyMM}-{id}.png";
             return Results.File(png, "image/png", fileName);
-        }).RequireAuthorization();
+        }).RequireAuthorization("Feature:bills");
     }
 }

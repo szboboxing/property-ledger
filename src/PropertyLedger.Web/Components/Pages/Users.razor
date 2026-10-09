@@ -4,9 +4,9 @@
 @inject AuthService Auth
 @inject AuthenticationStateProvider AuthState
 
-<PageTitle>用户管理</PageTitle>
+<PageTitle>用户管理 · 物业管理小工具</PageTitle>
 
-<div class="page-head"><h1>用户</h1></div>
+<div class="page-head"><h1>用户管理</h1></div>
 
 @if (Error is not null) { <div class="alert alert-danger py-2 px-3">@Error</div> }
 @if (Ok is not null) { <div class="alert alert-success py-2 px-3">@Ok</div> }
@@ -16,31 +16,49 @@
     <div class="row g-2">
         <div class="col-6 col-md-3">
             <label class="form-label">登录名 *</label>
-            <input class="form-control" @bind="newUserName" />
+            <input class="form-control" @bind="newUserName" placeholder="登录名" />
         </div>
         <div class="col-6 col-md-3">
             <label class="form-label">显示名</label>
-            <input class="form-control" @bind="newDisplayName" />
+            <input class="form-control" @bind="newDisplayName" placeholder="显示名" />
         </div>
         <div class="col-6 col-md-3">
             <label class="form-label">初始密码 *（≥6位）</label>
-            <input type="text" class="form-control" @bind="newPassword" />
+            <input type="text" class="form-control" @bind="newPassword" placeholder="≥6位" />
         </div>
-        <div class="col-6 col-md-2 d-flex align-items-end">
-            <div class="form-check">
-                <input type="checkbox" class="form-check-input" id="isAdmin" @bind="newIsAdmin" />
-                <label class="form-check-label" for="isAdmin">管理员</label>
+        <div class="col-6 col-md-3">
+            <label class="form-label">角色</label>
+            <select class="form-select" @bind="newRole">
+                <option value="user">普通用户</option>
+                <option value="admin">总管理员</option>
+            </select>
+        </div>
+    </div>
+
+    @if (newRole != "admin")
+    {
+        <div class="mt-2">
+            <span class="form-label d-block">可用功能（默认仅账单记账）</span>
+            <div class="d-flex flex-wrap gap-3">
+                @foreach (var (key, name) in UserFeatures.All)
+                {
+                    <label class="form-check mb-0">
+                        <input type="checkbox" class="form-check-input" checked="@GetNewFeature(key)" @onclick="() => ToggleNewFeature(key)" />
+                        <span class="form-check-label">@name</span>
+                    </label>
+                }
             </div>
         </div>
-        <div class="col-12 col-md-1 d-flex align-items-end">
-            <button class="btn btn-brand w-100" @onclick="Create">添加</button>
-        </div>
+    }
+
+    <div class="mt-3">
+        <button class="btn btn-brand" @onclick="Create">添加用户</button>
     </div>
 </div>
 
 <div class="table-wrap">
     <table class="data">
-        <thead><tr><th>登录名</th><th>显示名</th><th>角色</th><th>状态</th><th>最近登录</th><th class="num">操作</th></tr></thead>
+        <thead><tr><th>登录名</th><th>显示名</th><th>角色</th><th>可用功能</th><th>状态</th><th>最近登录</th><th class="num">操作</th></tr></thead>
         <tbody>
             @foreach (var u in users)
             {
@@ -48,7 +66,25 @@
                 <tr>
                     <td data-label="登录名" class="fw-semibold">@u.UserName @if (isSelf){<span class="badge-state st-neutral ms-1">我</span>}</td>
                     <td data-label="显示名">@u.DisplayName</td>
-                    <td data-label="角色">@(u.IsAdmin ? "管理员" : "普通用户")</td>
+                    <td data-label="角色">@(u.IsAdmin ? "总管理员" : "普通用户")</td>
+                    <td data-label="可用功能">
+                        @if (u.IsAdmin)
+                        {
+                            <span class="badge-state st-paid">全部</span>
+                        }
+                        else
+                        {
+                            var names = UserFeatures.Names(u.Features);
+                            @if (names.Count == 0)
+                            {
+                                <span class="badge-state st-neutral">未分配</span>
+                            }
+                            else
+                            {
+                                <span>@string.Join("、", names)</span>
+                            }
+                        }
+                    </td>
                     <td data-label="状态">
                         @if (u.IsActive)
                         {
@@ -61,6 +97,10 @@
                     </td>
                     <td data-label="最近登录">@(u.LastLoginAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
                     <td data-label="操作" class="num no-label">
+                        @if (!u.IsAdmin)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => TogglePerms(u.Id)">功能权限</button>
+                        }
                         <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleReset(u.Id)">重置密码</button>
                         @if (u.IsActive)
                         {
@@ -72,10 +112,32 @@
                         }
                     </td>
                 </tr>
+                @if (permsId == u.Id && !u.IsAdmin)
+                {
+                    <tr>
+                        <td colspan="7" class="no-label">
+                            <div class="py-2">
+                                <div class="section-hint mb-2">配置 @u.UserName（@u.DisplayName）可用的功能：</div>
+                                <div class="d-flex flex-wrap gap-3 mb-2">
+                                    @foreach (var (key, name) in UserFeatures.All)
+                                    {
+                                        <label class="form-check mb-0">
+                                            <input type="checkbox" class="form-check-input" checked="@GetEditFeature(key)" @onclick="() => ToggleEditFeature(key)" />
+                                            <span class="form-check-label">@name</span>
+                                        </label>
+                                    }
+                                </div>
+                                <button class="btn btn-brand btn-sm" @onclick="() => SavePerms(u.Id)">保存</button>
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="CancelPerms">取消</button>
+                                <span class="section-hint ms-2">修改权限后需重新登录生效</span>
+                            </div>
+                        </td>
+                    </tr>
+                }
                 @if (resetId == u.Id)
                 {
                     <tr>
-                        <td colspan="6" class="no-label">
+                        <td colspan="7" class="no-label">
                             <div class="d-flex gap-2 align-items-center py-2">
                                 <span>为 @u.UserName 设置新密码：</span>
                                 <input type="text" class="form-control form-control-sm" style="max-width:220px" @bind="resetPassword" placeholder="新密码（≥6位）" />
@@ -95,7 +157,11 @@
     private int currentUserId;
 
     private string newUserName = "", newDisplayName = "", newPassword = "";
-    private bool newIsAdmin;
+    private string newRole = "user";
+    private HashSet<string> newFeatures = new() { UserFeatures.DefaultForNewUser };
+
+    private int? permsId;
+    private HashSet<string> editFeatures = new();
 
     private int? resetId;
     private string resetPassword = "";
@@ -110,18 +176,59 @@
 
     private async Task LoadAsync() => users = await Auth.ListAsync();
 
+    // ── 新增用户 ──
+    private bool GetNewFeature(string key) => newFeatures.Contains(key);
+    private void ToggleNewFeature(string key)
+    {
+        if (!newFeatures.Remove(key)) newFeatures.Add(key);
+    }
+
     private async Task Create()
     {
         Error = Ok = null;
-        await RunSafe(() => Auth.CreateAsync(newUserName, newDisplayName, newPassword, newIsAdmin));
+        await RunSafe(() => Auth.CreateAsync(newUserName, newDisplayName, newPassword,
+            isAdmin: newRole == "admin", features: string.Join(',', newFeatures)));
         if (Error is null)
         {
-            newUserName = newDisplayName = newPassword = ""; newIsAdmin = false;
+            newUserName = newDisplayName = newPassword = "";
+            newRole = "user";
+            newFeatures = new HashSet<string> { UserFeatures.DefaultForNewUser };
             Ok = "用户已创建。";
             await LoadAsync();
         }
     }
 
+    // ── 功能权限编辑 ──
+    private void TogglePerms(int id)
+    {
+        var u = users.FirstOrDefault(x => x.Id == id);
+        if (u is null) return;
+        permsId = permsId == id ? null : id;
+        editFeatures = new HashSet<string>(UserFeatures.Parse(u.Features));
+        resetId = null;
+        Error = Ok = null;
+    }
+
+    private bool GetEditFeature(string key) => editFeatures.Contains(key);
+    private void ToggleEditFeature(string key)
+    {
+        if (!editFeatures.Remove(key)) editFeatures.Add(key);
+    }
+
+    private async Task SavePerms(int id)
+    {
+        Error = Ok = null;
+        await RunSafe(() => Auth.SetFeaturesAsync(id, string.Join(',', editFeatures)));
+        if (Error is null) { permsId = null; Ok = "功能权限已保存（该用户重新登录后生效）。"; await LoadAsync(); }
+    }
+
+    private void CancelPerms()
+    {
+        permsId = null;
+        Error = Ok = null;
+    }
+
+    // ── 停用 / 启用 ──
     private async Task SetActive(int id, bool active)
     {
         Error = Ok = null;
@@ -129,10 +236,12 @@
         if (Error is null) { Ok = active ? "已启用。" : "已停用。"; await LoadAsync(); }
     }
 
+    // ── 重置密码 ──
     private void ToggleReset(int id)
     {
         resetId = resetId == id ? null : id;
         resetPassword = "";
+        permsId = null;
         Error = Ok = null;
     }
 
