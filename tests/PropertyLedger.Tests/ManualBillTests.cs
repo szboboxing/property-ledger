@@ -108,6 +108,62 @@ public class ManualBillTests
         await Assert.ThrowsAsync<DomainException>(
             () => svc.CreateManualBillAsync(lease.Id, 2026, 3, 0m, null));
     }
+
+    [Fact]
+    public async Task ManualRange_MultiMonths_CreatesAll()
+    {
+        using var db = new TestDb();
+        var lease = await SeedLeaseAsync(db, new DateTime(2026, 1, 1), new DateTime(2026, 12, 31));
+        var svc = new BillingService(db.Db);
+
+        var result = await svc.CreateManualBillsRangeAsync(lease.Id, 2026, 1, 2026, 3, null, "接手旧账");
+
+        Assert.Equal(3, result.Created);
+        Assert.Equal(0, result.Skipped);
+        Assert.Equal(0, result.OutOfRange);
+        Assert.All(result.CreatedBills, b => { Assert.True(b.IsManual); Assert.Equal(1500m, b.TotalAmount); });
+        Assert.Equal(new[] { "2026-01", "2026-02", "2026-03" },
+            result.CreatedBills.Select(b => b.PeriodStart.ToString("yyyy-MM")).ToArray());
+    }
+
+    [Fact]
+    public async Task ManualRange_SkipsExisting_AndCountsOutOfRange()
+    {
+        using var db = new TestDb();
+        // 租约 2026-02-01 起：1 月在租期外；先自动出账 2 月
+        var lease = await SeedLeaseAsync(db, new DateTime(2026, 2, 1), new DateTime(2026, 12, 31));
+        var svc = new BillingService(db.Db);
+        await svc.CreateManualBillAsync(lease.Id, 2026, 2, null, null);
+
+        var result = await svc.CreateManualBillsRangeAsync(lease.Id, 2026, 1, 2026, 4, null, null);
+
+        Assert.Equal(2, result.Created);        // 3 月、4 月新建
+        Assert.Equal(1, result.Skipped);        // 2 月已有账单
+        Assert.Equal(1, result.OutOfRange);     // 1 月不在租期内
+    }
+
+    [Fact]
+    public async Task ManualRange_InvertedRange_Rejected()
+    {
+        using var db = new TestDb();
+        var lease = await SeedLeaseAsync(db, new DateTime(2026, 1, 1));
+        var svc = new BillingService(db.Db);
+
+        await Assert.ThrowsAsync<DomainException>(
+            () => svc.CreateManualBillsRangeAsync(lease.Id, 2026, 3, 2026, 1, null, null));
+    }
+
+    [Fact]
+    public async Task ManualRange_PerBillAmount_AppliesToEach()
+    {
+        using var db = new TestDb();
+        var lease = await SeedLeaseAsync(db, new DateTime(2026, 1, 1), new DateTime(2026, 12, 31));
+        var svc = new BillingService(db.Db);
+
+        var result = await svc.CreateManualBillsRangeAsync(lease.Id, 2026, 5, 2026, 6, 800m, null);
+        Assert.Equal(2, result.Created);
+        Assert.All(result.CreatedBills, b => Assert.Equal(800m, b.TotalAmount));
+    }
 }
 
 /// <summary>HTML 摘要：剥标签、去脚本、块级转空格、截断。</summary>
@@ -158,5 +214,51 @@ public class ReportsFeatureTests
         Assert.Contains(("reports", "报表"), UserFeatures.All);
         Assert.True(UserFeatures.IsValidKey("reports"));
         Assert.Equal("bills,reports", UserFeatures.Normalize("reports, bills, bogus"));
+    }
+}
+
+/// <summary>清空业务数据：按外键顺序删除，保留用户与设置。</summary>
+public class MaintenanceTests
+{
+    [Fact]
+    public async Task WipeBusinessData_RemovesAllBusinessRows_KeepsUsersAndSettings()
+    {
+        using var db = new TestDb();
+        var svc = new BillingService(db.Db);
+
+        var lease = new Lease
+        {
+            Room = new Room { Property = new Property { Name = "幸福小区" }, Name = "101", DefaultRent = 1500m },
+            Tenant = new Tenant { Name = "张三" },
+            StartDate = new DateTime(2026, 1, 1),
+            RentAmount = 1500m, Deposit = 1500m,
+            PaymentDay = 5, PaymentCycle = PaymentCycle.Monthly,
+            Status = LeaseStatus.Active,
+        };
+        db.Db.Leases.Add(lease);
+        await db.Db.SaveChangesAsync();
+        await svc.EnsureBillsThroughAsync(new DateTime(2026, 1, 1));
+        var bill = await db.Db.Bills.Include(b => b.Payments).FirstAsync(b => b.LeaseId == lease.Id);
+        await svc.RecordPaymentAsync(bill.Id, 500m, PaymentMethod.Cash, DateTime.Now, null);
+        db.Db.Users.Add(new AppUser { UserName = "wipeadmin", PasswordHash = "x", IsAdmin = true });
+        db.Db.Settings.Add(new Setting { Key = "landlord_name", Value = "王女士" });
+        await db.Db.SaveChangesAsync();
+
+        Assert.True(await db.Db.Bills.AnyAsync());
+
+        var maint = new MaintenanceService(db.Db);
+        var (payments, items, bills, leases, rooms, tenants, properties) = await maint.WipeBusinessDataAsync();
+
+        Assert.Equal(1, payments);
+        Assert.Equal(0, items);
+        Assert.Equal(1, bills);
+        Assert.Equal(1, leases);
+        Assert.Equal(1, rooms);
+        Assert.Equal(1, tenants);
+        Assert.Equal(1, properties);
+        Assert.False(await db.Db.Bills.AnyAsync());
+        // 用户与设置保留
+        Assert.True(await db.Db.Users.AnyAsync(u => u.UserName == "wipeadmin"));
+        Assert.True(await db.Db.Settings.AnyAsync(s => s.Key == "landlord_name"));
     }
 }

@@ -21,6 +21,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // 领域服务（DbContext 为 Scoped，与 Blazor Server 电路及 HTTP 请求生命周期一致）
 builder.Services.AddScoped<BillingService>();
+builder.Services.AddScoped<MaintenanceService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<BillImageRenderer>();

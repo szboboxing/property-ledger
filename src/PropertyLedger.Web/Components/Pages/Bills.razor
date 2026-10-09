@@ -60,16 +60,25 @@
                 <div class="section-hint mt-1">已退租的租约也可补录历史月份账单。</div>
             </div>
             <div class="col-6 col-md-2">
-                <label class="form-label">账期月份 *</label>
-                <input type="month" class="form-control" @bind="manualMonth" @bind:format="yyyy-MM" />
+                <label class="form-label">开始月份 *</label>
+                <input type="month" class="form-control" @bind="manualStart" @bind:format="yyyy-MM" />
             </div>
-            <div class="col-6 col-md-3">
-                <label class="form-label">金额</label>
-                <input type="number" step="0.01" min="0" class="form-control" @bind="manualAmount" placeholder="留空=按租约标准" />
-                <div class="section-hint mt-1">月付=月租；季付=三个月租金</div>
+            <div class="col-6 col-md-2">
+                <label class="form-label">结束月份 *</label>
+                <input type="month" class="form-control" @bind="manualEnd" @bind:format="yyyy-MM" />
             </div>
-            <div class="col-12 col-md-3 d-flex align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label">每期金额</label>
+                <input type="number" step="0.01" min="0" class="form-control" @bind="manualAmount" placeholder="留空=标准" />
+            </div>
+            <div class="col-6 col-md-2 d-flex align-items-end">
                 <button class="btn btn-brand w-100" @onclick="SubmitManual">确认补录</button>
+            </div>
+            <div class="col-12">
+                <div class="section-hint">
+                    支持连续多月一次补录（如 2025-01 至 2025-06），只补单月则开始 = 结束；每期金额留空按租约标准（月付 = 月租，季付 = 三个月租金）；
+                    范围内已有账单的月份自动跳过，租期外的月份忽略并提示。
+                </div>
             </div>
             <div class="col-12">
                 <label class="form-label">备注（选填，可上传图片，如手写欠条照片）</label>
@@ -282,7 +291,8 @@
     private bool showManual;
     private List<Lease> manualLeases = new();
     private int manualLeaseId;
-    private DateTime manualMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-1);
+    private DateTime manualStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-1);
+    private DateTime manualEnd = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-1);
     private decimal? manualAmount;
     private string? manualNote;
 
@@ -306,19 +316,25 @@
     private async Task SubmitManual()
     {
         if (manualLeaseId <= 0) { Error = "请选择租约。"; return; }
+        var result = default(BillingService.ManualRangeResult);
         await RunSafe(async () =>
         {
-            await Billing.CreateManualBillAsync(manualLeaseId, manualMonth.Year, manualMonth.Month, manualAmount, manualNote);
+            result = await Billing.CreateManualBillsRangeAsync(
+                manualLeaseId, manualStart.Year, manualStart.Month, manualEnd.Year, manualEnd.Month,
+                manualAmount, manualNote);
             return true;
         });
         if (Error is null)
         {
-            Ok = "已补录账单，列表已定位到该账期，可直接记账。";
+            var parts = new List<string> { $"成功补录 {result.Created} 张账单" };
+            if (result.Skipped > 0) parts.Add($"跳过 {result.Skipped} 个已有账单的月份");
+            if (result.OutOfRange > 0) parts.Add($"{result.OutOfRange} 个月不在租约租期内已忽略");
+            Ok = string.Join("，", parts) + "，列表已定位到起始账期。";
             manualAmount = null;
             manualNote = null;
             showManual = false;
-            // 定位到补录的账期月份，方便立刻看到
-            monthDate = new DateTime(manualMonth.Year, manualMonth.Month, 1);
+            // 定位到补录起始月份，方便立刻看到
+            monthDate = new DateTime(manualStart.Year, manualStart.Month, 1);
             showAll = false;
             await LoadAsync();
         }

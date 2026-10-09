@@ -47,14 +47,43 @@
     <div class="section-hint mt-2">支持 PNG / JPG，建议正方形，大小不超过 5MB。</div>
 </div>
 
+@if (isAdmin)
+{
+    <div class="card p-4 mt-3 danger-zone">
+        <h5 class="text-danger mb-2">危险操作 · 清空业务数据（仅总管理员可见）</h5>
+        <div class="section-hint mb-3">
+            删除全部<b>物业、房间、租客、租约、账单、收款记录</b>以及备注中上传的图片，用于把台账重置给新一批物业使用。
+            <b>登录账号与基础设置（房东称呼、收款提示语、收款码）会保留</b>；操作不可恢复，请先确认已有备份。
+        </div>
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label">请输入「清空」两字以确认</label>
+                <input class="form-control" @bind="wipeConfirmText" placeholder="清空" />
+            </div>
+            <div class="col-12 col-md-3">
+                <button class="btn btn-danger" @onclick="WipeData" disabled="@(wipeConfirmText?.Trim() != "清空")">确认清空</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private string? landlord;
     private string? notice;
     private string? qrDataUri;
     private string? Error, Ok;
+    private bool isAdmin;
+    private string? wipeConfirmText;
+
+    [Inject] private AuthenticationStateProvider AuthState { get; set; } = default!;
+    [Inject] private MaintenanceService Maintenance { get; set; } = default!;
+    [Inject] private Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        isAdmin = auth.User.IsInRole("Admin");
+
         var s = await SettingsSvc.GetManyAsync(new[]
         {
             SettingKeys.LandlordName, SettingKeys.PaymentNotice, SettingKeys.PayQrCode,
@@ -62,6 +91,32 @@
         landlord = s.GetValueOrDefault(SettingKeys.LandlordName) ?? "";
         notice = s.GetValueOrDefault(SettingKeys.PaymentNotice) ?? "";
         qrDataUri = s.GetValueOrDefault(SettingKeys.PayQrCode);
+    }
+
+    private async Task WipeData()
+    {
+        Error = Ok = null;
+        if (wipeConfirmText?.Trim() != "清空")
+        {
+            Error = "请先在输入框中输入「清空」两字确认。";
+            return;
+        }
+
+        var (payments, items, bills, leases, rooms, tenants, properties) = await Maintenance.WipeBusinessDataAsync();
+
+        // 清空富文本备注上传的图片（uploads 目录；Docker 中为挂载卷，保留目录本身）
+        var files = 0;
+        var uploadsDir = Path.Combine(Env.ContentRootPath, "uploads");
+        if (Directory.Exists(uploadsDir))
+        {
+            foreach (var f in Directory.GetFiles(uploadsDir))
+            {
+                try { File.Delete(f); files++; } catch { /* 被占用的文件跳过 */ }
+            }
+        }
+
+        wipeConfirmText = null;
+        Ok = $"已清空业务数据：收款 {payments} 笔、杂费 {items} 条、账单 {bills} 张、租约 {leases} 份、房间 {rooms} 间、租客 {tenants} 位、物业 {properties} 处，并删除备注图片 {files} 个。登录账号与基础设置已保留。";
     }
 
     private async Task SaveText()

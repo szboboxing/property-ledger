@@ -116,46 +116,96 @@ public class BillingService
 
     // ───────────────────────── 人工补录 ─────────────────────────
 
+    /// <summary>补录结果统计：新建数 / 跳过数（该账期已有账单）/ 租期外月份数。</summary>
+    public readonly record struct ManualRangeResult(int Created, int Skipped, int OutOfRange, List<Bill> CreatedBills);
+
     /// <summary>
-    /// 补录过往账单（记录历史欠款）：为指定租约补一张指定月份的账单。
-    /// 允许补录已结束的租约，但账期必须与租期有交集；同账期已有账单则拒绝（唯一索引兜底）。
-    /// 金额留空时按租约标准金额自动计算（季付 = 三个月租金）。
+    /// 补录过往账单（记录历史欠款）：为指定租约补录一段连续月份的账单（单月 = 起止相同）。
+    /// 允许补录已结束的租约；逐月判定：与租期无交集的月份跳过并计数，已有账单的月份跳过（幂等），
+    /// 其余新建。金额留空时每张按租约标准金额自动计算（季付 = 三个月租金）。
     /// </summary>
-    public async Task<Bill> CreateManualBillAsync(
-        int leaseId, int year, int month, decimal? amount, string? note, CancellationToken ct = default)
+    public async Task<ManualRangeResult> CreateManualBillsRangeAsync(
+        int leaseId, int startYear, int startMonth, int endYear, int endMonth,
+        decimal? amountPerBill, string? note, CancellationToken ct = default)
     {
         var lease = await _db.Leases.AsNoTracking().FirstOrDefaultAsync(l => l.Id == leaseId, ct)
                     ?? throw new DomainException("租约不存在。");
 
-        if (amount is { } amt && amt <= 0m)
+        if (amountPerBill is { } amt && amt <= 0m)
             throw new DomainException("补录金额必须大于 0。");
 
-        if (!TryGetPeriod(lease, year, month, out var plan))
-            throw new DomainException($"{year} 年 {month} 月不在该租约的租期内，无法补录。");
+        var startIdx = startYear * 12 + (startMonth - 1);
+        var endIdx = endYear * 12 + (endMonth - 1);
+        if (startIdx > endIdx)
+            throw new DomainException("开始月份不能晚于结束月份。");
 
-        var dup = await _db.Bills.AnyAsync(b => b.LeaseId == leaseId && b.PeriodStart == plan.PeriodStart, ct);
-        if (dup)
-            throw new DomainException("该账期已存在账单，无需重复补录。");
+        // 已有账期集合（避免逐月查库）
+        var startY = new DateTime(startYear, startMonth, 1);
+        var endFirst = new DateTime(endYear, endMonth, 1);
+        var existing = await _db.Bills
+            .Where(b => b.LeaseId == leaseId && b.PeriodStart >= startY && b.PeriodStart <= endFirst)
+            .Select(b => b.PeriodStart)
+            .ToListAsync(ct);
+        var existingSet = existing.Select(d => (d.Year, d.Month)).ToHashSet();
 
-        var rent = amount ?? plan.RentAmount;
-        var bill = new Bill
+        var created = 0;
+        var skipped = 0;
+        var outOfRange = 0;
+        var createdBills = new List<Bill>();
+
+        var cursor = startY;
+        while (cursor <= endFirst)
         {
-            LeaseId = lease.Id,
-            RoomId = lease.RoomId,
-            TenantId = lease.TenantId,
-            PeriodStart = plan.PeriodStart,
-            PeriodEnd = plan.PeriodEnd,
-            DueDate = plan.DueDate,
-            RentAmount = rent,
-            TotalAmount = rent,
-            PaidAmount = 0m,
-            Status = BillStatus.Unpaid,
-            IsManual = true,
-            Note = note,
-        };
-        _db.Bills.Add(bill);
-        await _db.SaveChangesAsync(ct);
-        return bill;
+            if (!TryGetPeriod(lease, cursor.Year, cursor.Month, out var plan))
+            {
+                outOfRange++;
+            }
+            else if (existingSet.Contains((plan.PeriodStart.Year, plan.PeriodStart.Month)))
+            {
+                skipped++;
+            }
+            else
+            {
+                var rent = amountPerBill ?? plan.RentAmount;
+                var bill = new Bill
+                {
+                    LeaseId = lease.Id,
+                    RoomId = lease.RoomId,
+                    TenantId = lease.TenantId,
+                    PeriodStart = plan.PeriodStart,
+                    PeriodEnd = plan.PeriodEnd,
+                    DueDate = plan.DueDate,
+                    RentAmount = rent,
+                    TotalAmount = rent,
+                    PaidAmount = 0m,
+                    Status = BillStatus.Unpaid,
+                    IsManual = true,
+                    Note = note,
+                };
+                _db.Bills.Add(bill);
+                createdBills.Add(bill);
+                created++;
+            }
+            cursor = cursor.AddMonths(1);
+        }
+
+        if (created > 0) await _db.SaveChangesAsync(ct);
+        return new ManualRangeResult(created, skipped, outOfRange, createdBills);
+    }
+
+    /// <summary>
+    /// 补录单月账单（范围补录的特例，保留语义化入口）：
+    /// 该月不在租期内或已有账单时直接抛错（与多月批量补录的"跳过并汇总"不同）。
+    /// </summary>
+    public async Task<Bill> CreateManualBillAsync(
+        int leaseId, int year, int month, decimal? amount, string? note, CancellationToken ct = default)
+    {
+        var result = await CreateManualBillsRangeAsync(leaseId, year, month, year, month, amount, note, ct);
+        if (result.OutOfRange > 0)
+            throw new DomainException($"{year} 年 {month} 月不在该租约的租期内，无法补录。");
+        if (result.Skipped > 0)
+            throw new DomainException("该账期已存在账单，无需重复补录。");
+        return result.CreatedBills.Single();
     }
 
     // ───────────────────────── 收款 ─────────────────────────

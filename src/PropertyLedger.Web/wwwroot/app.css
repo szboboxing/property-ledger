@@ -153,3 +153,6 @@ table.data tbody td { padding: 10px 12px; vertical-align: middle; border-top: 1p
 .rich-note img, .rich-view img { max-width: 100%; height: auto; border-radius: 8px; }
 .rich-view { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; overflow-x: auto; }
 .note-expand td { background: #fafafa; }
+
+/* 设置页危险操作区 */
+.danger-zone { border: 1px solid rgba(220, 38, 38, .35); background: #fef2f2; }
