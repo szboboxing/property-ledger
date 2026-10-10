@@ -1,4 +1,4 @@
-using PropertyLedger.Core.Models;
+﻿using PropertyLedger.Core.Models;
 using PropertyLedger.Core.Services;
 
 namespace PropertyLedger.Tests;
@@ -11,7 +11,7 @@ public class PeriodTests
         {
             RoomId = 1, TenantId = 1,
             StartDate = start, EndDate = end,
-            RentAmount = rent, Deposit = rent,
+            RentAmount = rent, HouseDeposit = rent,
             PaymentDay = payDay, PaymentCycle = PaymentCycle.Monthly,
             Status = LeaseStatus.Active,
         };

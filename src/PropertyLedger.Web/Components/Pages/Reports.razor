@@ -144,7 +144,29 @@ else
         </table>
     </div>
 
-    <h5 class="mt-3 mb-2">欠款一览</h5>
+    <h5 class="mt-3 mb-2 d-flex flex-wrap align-items-center gap-2">
+        <span>欠款一览</span>
+        @if (Arrears.Count > 0)
+        {
+            <div class="d-flex flex-wrap align-items-center gap-2 ms-auto fw-normal">
+                <span class="section-hint">每页</span>
+                <select class="form-select form-select-sm w-auto" @bind="arPageSize" @bind:after="() => arPage = 1">
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="30">30</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+                <span class="section-hint">条</span>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button class="btn btn-outline-secondary" @onclick="() => arPage--" disabled="@(arPage <= 1)">上一页</button>
+                    <button class="btn btn-outline-secondary" disabled>第 @arPage / @ArPages 页</button>
+                    <button class="btn btn-outline-secondary" @onclick="() => arPage++" disabled="@(arPage >= ArPages)">下一页</button>
+                </div>
+                <span class="section-hint">共 @Arrears.Count 条</span>
+            </div>
+        }
+    </h5>
     <div class="table-wrap">
         <table class="data">
             <thead>
@@ -155,7 +177,7 @@ else
                 {
                     <tr><td colspan="8" class="empty no-label">没有欠款，账已全部收清。</td></tr>
                 }
-                @foreach (var b in Arrears)
+                @foreach (var b in ArPageItems)
                 {
                     <tr>
                         <td data-label="物业 · 房间">
@@ -272,11 +294,28 @@ else
         .OrderByDescending(r => r.Total)
         .ToList();
 
-    // ── 欠款一览：当前全部未收清的账单（不受年份筛选影响），按租客分组排序 ──
+    // ── 欠款一览：当前全部未收清的账单（不受年份筛选影响），按租客分组排序；分页展示（合计行始终为全量）──
     private List<Bill> Arrears => all
         .Where(b => b.TotalAmount - b.PaidAmount > 0.001m)
         .OrderBy(b => b.Tenant?.Name).ThenBy(b => b.PeriodStart)
         .ToList();
+
+    private int arPageSize { get; set; } = 10;
+    private int arPage { get; set; } = 1;
+
+    private int ArPages => Math.Max(1, (int)Math.Ceiling(Arrears.Count / (double)arPageSize));
+
+    private List<Bill> ArPageItems
+    {
+        get
+        {
+            var items = Arrears;
+            var pages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)arPageSize));
+            if (arPage > pages) arPage = pages;
+            if (arPage < 1) arPage = 1;
+            return items.Skip((arPage - 1) * arPageSize).Take(arPageSize).ToList();
+        }
+    }
 
     private decimal arTotal => Arrears.Sum(b => b.TotalAmount);
     private decimal arPaid => Arrears.Sum(b => b.PaidAmount);

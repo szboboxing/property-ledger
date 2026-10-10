@@ -18,8 +18,14 @@ public class Lease
     /// <summary>每月租金（月付时单月金额；季付时为单月金额，出账乘 3）</summary>
     public decimal RentAmount { get; set; }
 
-    /// <summary>押金</summary>
-    public decimal Deposit { get; set; }
+    /// <summary>房屋押金</summary>
+    public decimal HouseDeposit { get; set; }
+
+    /// <summary>水电押金</summary>
+    public decimal UtilityDeposit { get; set; }
+
+    /// <summary>押金合计（房屋 + 水电）</summary>
+    public decimal DepositTotal => HouseDeposit + UtilityDeposit;
 
     /// <summary>每月付租日（1-31）。31 日在短月自动落到当月最后一天。</summary>
     public int PaymentDay { get; set; } = 1;

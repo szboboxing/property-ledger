@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using PropertyLedger.Core.Models;
 using PropertyLedger.Core.Services;
 
@@ -17,7 +17,7 @@ public class BillingTests
         {
             Room = r, Tenant = t,
             StartDate = start,
-            RentAmount = rent, Deposit = rent,
+            RentAmount = rent, HouseDeposit = rent,
             PaymentDay = 5, PaymentCycle = cycle,
             Status = LeaseStatus.Active,
         };

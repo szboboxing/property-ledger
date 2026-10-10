@@ -56,8 +56,12 @@ else
                 <input type="number" step="0.01" class="form-control" @bind="form.RentAmount" />
             </div>
             <div class="col-6 col-md-3">
-                <label class="form-label">押金</label>
-                <input type="number" step="0.01" class="form-control" @bind="form.Deposit" />
+                <label class="form-label">房屋押金</label>
+                <input type="number" step="0.01" class="form-control" @bind="form.HouseDeposit" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label">水电押金</label>
+                <input type="number" step="0.01" class="form-control" @bind="form.UtilityDeposit" />
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label">每月付租日</label>
@@ -159,7 +163,7 @@ else
     <div class="table-wrap">
         <table class="data">
             <thead>
-                <tr><th>房间</th><th>租客</th><th>租期</th><th class="num">月租</th><th class="num">押金</th><th>付租</th><th>状态</th><th class="num">操作</th></tr>
+                <tr><th>房间</th><th>租客</th><th>租期</th><th class="num">月租</th><th class="num">押金（房屋/水电）</th><th>付租</th><th>状态</th><th class="num">操作</th></tr>
             </thead>
             <tbody>
                 @if (leases.Count == 0)
@@ -176,7 +180,10 @@ else
                             <div class="section-hint">@(l.EndDate.HasValue ? "至 " + l.EndDate.Value.ToString("yyyy-MM-dd") : "长期")</div>
                         </td>
                         <td data-label="月租" class="num">¥@l.RentAmount.ToString("0.00")</td>
-                        <td data-label="押金" class="num">¥@l.Deposit.ToString("0.00")</td>
+                        <td data-label="押金（房屋/水电）" class="num">
+                            <div>¥@l.HouseDeposit.ToString("0.00")</div>
+                            <div class="section-hint">水电 ¥@l.UtilityDeposit.ToString("0.00")</div>
+                        </td>
                         <td data-label="付租">
                             @(l.PaymentCycle == PaymentCycle.Quarterly ? "季付" : "月付")
                             <div class="section-hint">每月 @l.PaymentDay 日</div>
@@ -230,7 +237,8 @@ else
         public DateTime? EndDate { get; set; }
         public bool LongTerm { get; set; } = true;
         public decimal RentAmount { get; set; }
-        public decimal Deposit { get; set; }
+        public decimal HouseDeposit { get; set; }
+        public decimal UtilityDeposit { get; set; }
         public int PaymentDay { get; set; } = 1;
         public PaymentCycle Cycle { get; set; } = PaymentCycle.Monthly;
         public string? Note { get; set; }
@@ -266,7 +274,7 @@ else
         {
             RoomId = l.RoomId, TenantId = l.TenantId,
             StartDate = l.StartDate, EndDate = l.EndDate, LongTerm = !l.EndDate.HasValue,
-            RentAmount = l.RentAmount, Deposit = l.Deposit, PaymentDay = l.PaymentDay,
+            RentAmount = l.RentAmount, HouseDeposit = l.HouseDeposit, UtilityDeposit = l.UtilityDeposit, PaymentDay = l.PaymentDay,
             Cycle = l.PaymentCycle, Note = l.Note,
         };
         Error = null;
@@ -304,7 +312,7 @@ else
             {
                 RoomId = form.RoomId, TenantId = form.TenantId,
                 StartDate = form.StartDate, EndDate = end,
-                RentAmount = form.RentAmount, Deposit = form.Deposit,
+                RentAmount = form.RentAmount, HouseDeposit = form.HouseDeposit, UtilityDeposit = form.UtilityDeposit,
                 PaymentDay = form.PaymentDay, PaymentCycle = form.Cycle, Note = form.Note,
                 Status = LeaseStatus.Active,
             });
@@ -316,7 +324,7 @@ else
             {
                 l.RoomId = form.RoomId; l.TenantId = form.TenantId;
                 l.StartDate = form.StartDate; l.EndDate = end;
-                l.RentAmount = form.RentAmount; l.Deposit = form.Deposit;
+                l.RentAmount = form.RentAmount; l.HouseDeposit = form.HouseDeposit; l.UtilityDeposit = form.UtilityDeposit;
                 l.PaymentDay = form.PaymentDay; l.PaymentCycle = form.Cycle; l.Note = form.Note;
             }
         }

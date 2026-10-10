@@ -67,7 +67,8 @@ public class AppDbContext : DbContext
              .HasForeignKey(l => l.TenantId)
              .OnDelete(DeleteBehavior.Restrict);
             e.Property(l => l.RentAmount).HasPrecision(12, 2);
-            e.Property(l => l.Deposit).HasPrecision(12, 2);
+            e.Property(l => l.HouseDeposit).HasPrecision(12, 2);
+            e.Property(l => l.UtilityDeposit).HasPrecision(12, 2);
             // 同一租约同一账期不允许重复账单（由服务层按 PeriodStart 保证，这里加约束兜底）
         });
 

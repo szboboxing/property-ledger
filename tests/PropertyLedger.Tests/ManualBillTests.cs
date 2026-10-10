@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using PropertyLedger.Core.Models;
 using PropertyLedger.Core.Services;
 
@@ -15,7 +15,7 @@ public class ManualBillTests
             Tenant = new Tenant { Name = "张三" },
             StartDate = start,
             EndDate = end,
-            RentAmount = 1500m, Deposit = 1500m,
+            RentAmount = 1500m, HouseDeposit = 1500m,
             PaymentDay = 5, PaymentCycle = PaymentCycle.Monthly,
             Status = LeaseStatus.Active,
         };
@@ -231,7 +231,7 @@ public class MaintenanceTests
             Room = new Room { Property = new Property { Name = "幸福小区" }, Name = "101", DefaultRent = 1500m },
             Tenant = new Tenant { Name = "张三" },
             StartDate = new DateTime(2026, 1, 1),
-            RentAmount = 1500m, Deposit = 1500m,
+            RentAmount = 1500m, HouseDeposit = 1500m,
             PaymentDay = 5, PaymentCycle = PaymentCycle.Monthly,
             Status = LeaseStatus.Active,
         };
