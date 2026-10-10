@@ -7,7 +7,12 @@ COPY src/PropertyLedger.Web/PropertyLedger.Web.csproj src/PropertyLedger.Web/
 RUN dotnet restore src/PropertyLedger.Web/PropertyLedger.Web.csproj
 COPY src/ src/
 # 注意：publish 不能加 --no-restore，否则 Linux 下不会产出 wwwroot/_framework/blazor.web.js，容器内交互全挂
-RUN dotnet publish src/PropertyLedger.Web/PropertyLedger.Web.csproj -c Release -o /app/publish
+# 指定 linux RID：不带则把全平台（win/osx/arm 等）native 库都打进 runtimes/，白白多出约 450MB
+ARG TARGETARCH
+RUN RID="linux-x64"; if [ "$TARGETARCH" = "arm64" ]; then RID="linux-arm64"; fi; \
+    dotnet publish src/PropertyLedger.Web/PropertyLedger.Web.csproj -c Release -r $RID --self-contained false \
+        -p:DebugType=none -p:DebugSymbols=false -o /app/publish \
+    && rm -f /app/publish/web.config
 
 # ── 运行阶段 ──
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
