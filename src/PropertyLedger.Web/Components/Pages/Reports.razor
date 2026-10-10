@@ -143,6 +143,58 @@ else
             </tbody>
         </table>
     </div>
+
+    <h5 class="mt-3 mb-2">欠款一览</h5>
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr><th>物业 · 房间</th><th>租客</th><th>账期</th><th>到期日</th><th class="num">应收</th><th class="num">已收</th><th class="num">未收</th><th class="num">逾期</th></tr>
+            </thead>
+            <tbody>
+                @if (Arrears.Count == 0)
+                {
+                    <tr><td colspan="8" class="empty no-label">没有欠款，账已全部收清。</td></tr>
+                }
+                @foreach (var b in Arrears)
+                {
+                    <tr>
+                        <td data-label="物业 · 房间">
+                            <div class="fw-semibold">@b.Room?.Name</div>
+                            <div class="section-hint">@b.Room?.Property?.Name</div>
+                        </td>
+                        <td data-label="租客">@b.Tenant?.Name</td>
+                        <td data-label="账期">
+                            <div>@b.PeriodStart.ToString("yyyy-MM")</div>
+                            @if (b.PeriodEnd.Year != b.PeriodStart.Year || b.PeriodEnd.Month != b.PeriodStart.Month)
+                            {
+                                <div class="section-hint">至 @b.PeriodEnd.ToString("yyyy-MM")</div>
+                            }
+                        </td>
+                        <td data-label="到期日">@b.DueDate.ToString("yyyy-MM-dd")</td>
+                        <td data-label="应收" class="num">¥@b.TotalAmount.ToString("0.00")</td>
+                        <td data-label="已收" class="num">¥@b.PaidAmount.ToString("0.00")</td>
+                        <td data-label="未收" class="num text-danger fw-semibold">¥@((b.TotalAmount - b.PaidAmount).ToString("0.00"))</td>
+                        <td data-label="逾期" class="num @(b.IsOverdue(today) ? "text-danger" : "")">
+                            @(b.IsOverdue(today) ? $"逾期 {(today - b.DueDate).Days} 天" : "未到期")
+                        </td>
+                    </tr>
+                }
+                @if (Arrears.Count > 0)
+                {
+                    <tr>
+                        <td data-label="物业 · 房间" class="fw-bold" colspan="2">合计（@Arrears.Count 张）</td>
+                        <td data-label="账期"></td>
+                        <td data-label="到期日"></td>
+                        <td data-label="应收" class="num fw-bold">¥@arTotal.ToString("0.00")</td>
+                        <td data-label="已收" class="num fw-bold">¥@arPaid.ToString("0.00")</td>
+                        <td data-label="未收" class="num fw-bold text-danger">¥@arDue.ToString("0.00")</td>
+                        <td data-label="逾期"></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="section-hint mt-1">当前全部未收清的账单（不受年份筛选影响），含整月欠款与部分收款余欠，可用于催租核对。</div>
 }
 
 @code {
@@ -154,6 +206,7 @@ else
     {
         all = await Db.Bills
             .Include(b => b.Room).ThenInclude(r => r!.Property)
+            .Include(b => b.Tenant)
             .AsNoTracking()
             .ToListAsync();
     }
@@ -218,4 +271,14 @@ else
             g.Count(), g.Sum(b => b.TotalAmount), g.Sum(b => b.PaidAmount)))
         .OrderByDescending(r => r.Total)
         .ToList();
+
+    // ── 欠款一览：当前全部未收清的账单（不受年份筛选影响），按租客分组排序 ──
+    private List<Bill> Arrears => all
+        .Where(b => b.TotalAmount - b.PaidAmount > 0.001m)
+        .OrderBy(b => b.Tenant?.Name).ThenBy(b => b.PeriodStart)
+        .ToList();
+
+    private decimal arTotal => Arrears.Sum(b => b.TotalAmount);
+    private decimal arPaid => Arrears.Sum(b => b.PaidAmount);
+    private decimal arDue => arTotal - arPaid;
 }

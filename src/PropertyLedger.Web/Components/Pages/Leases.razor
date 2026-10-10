@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "Feature:leases")]
 @rendermode InteractiveServer
 @inject AppDbContext Db
+@inject BillingService Billing
 
 <PageTitle>租约管理</PageTitle>
 
@@ -87,6 +88,74 @@ else
         }
     </div>
 
+    @if (initLease is not null)
+    {
+        <div class="card p-3 mb-3">
+            <div class="d-flex flex-wrap gap-2 align-items-baseline">
+                <strong>历史账单初始化 — @initLease.Room?.Property?.Name · @initLease.Room?.Name · @initLease.Tenant?.Name</strong>
+                <span class="section-hint">列出该租约起租至今未收清的账单：填写「收款日期 + 本次实收」提交即登记收款（日期留空默认按到期日）；留空金额保持未付（欠款留账）；部分收款直接填实际金额。</span>
+            </div>
+            <div class="table-wrap mt-2">
+                <table class="data">
+                    <thead>
+                        <tr><th>账期</th><th>到期日</th><th class="num">应收</th><th class="num">已收</th><th class="num">剩余</th><th>收款日期</th><th class="num">本次实收</th><th>方式</th></tr>
+                    </thead>
+                    <tbody>
+                        @if (initRows.Count == 0)
+                        {
+                            <tr><td colspan="8" class="empty no-label">该租约没有未收清的账单，无需初始化。</td></tr>
+                        }
+                        @foreach (var r in initRows)
+                        {
+                            <tr>
+                                <td data-label="账期">
+                                    <div class="fw-semibold">@r.Bill.PeriodStart.ToString("yyyy-MM")</div>
+                                    @if (r.Bill.PeriodEnd.Year != r.Bill.PeriodStart.Year || r.Bill.PeriodEnd.Month != r.Bill.PeriodStart.Month)
+                                    {
+                                        <div class="section-hint">至 @r.Bill.PeriodEnd.ToString("yyyy-MM")</div>
+                                    }
+                                    @if (r.Bill.IsManual)
+                                    {
+                                        <span class="badge-state st-neutral">补录</span>
+                                    }
+                                </td>
+                                <td data-label="到期日">@r.Bill.DueDate.ToString("yyyy-MM-dd")</td>
+                                <td data-label="应收" class="num">¥@r.Bill.TotalAmount.ToString("0.00")</td>
+                                <td data-label="已收" class="num">¥@r.Bill.PaidAmount.ToString("0.00")</td>
+                                <td data-label="剩余" class="num text-danger fw-semibold">¥@r.Remaining.ToString("0.00")</td>
+                                <td data-label="收款日期"><input type="date" class="form-control form-control-sm" @bind="r.PaidDate" /></td>
+                                <td data-label="本次实收" class="num"><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end" style="max-width:130px" @bind="r.Amount" placeholder='@r.Remaining.ToString("0.##")' /></td>
+                                <td data-label="方式">
+                                    <select class="form-select form-select-sm" @bind="r.Method">
+                                        <option value="@PaymentMethod.WeChat">微信</option>
+                                        <option value="@PaymentMethod.Alipay">支付宝</option>
+                                        <option value="@PaymentMethod.Bank">银行转账</option>
+                                        <option value="@PaymentMethod.Cash">现金</option>
+                                        <option value="@PaymentMethod.Other">其他</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-flex gap-2 flex-wrap mt-2">
+                <button class="btn btn-sm btn-outline-success" @onclick="FillAllInit" disabled="@(initRows.Count == 0)">全部按剩余收清</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="ClearInitRows" disabled="@(initRows.Count == 0)">清空填写</button>
+                <button class="btn btn-brand" @onclick="SubmitInit" disabled="@(initRows.Count == 0)">提交登记收款</button>
+                <button class="btn btn-outline-secondary" @onclick="CloseInit">关闭</button>
+            </div>
+            @if (initErr is not null)
+            {
+                <div class="alert alert-danger py-2 px-3 mt-2 mb-0">@initErr</div>
+            }
+            @if (initOk is not null)
+            {
+                <div class="alert alert-success py-2 px-3 mt-2 mb-0">@initOk</div>
+            }
+        </div>
+    }
+
     <div class="table-wrap">
         <table class="data">
             <thead>
@@ -131,6 +200,7 @@ else
                         </td>
                         <td data-label="操作" class="num no-label">
                             <button class="btn btn-sm btn-outline-primary" @onclick="() => Edit(l)">编辑</button>
+                            <button class="btn btn-sm btn-outline-info" title="把起租至今的历史账单按实际收款情况录平（已收/部分收/欠款）" @onclick="() => OpenInit(l)">初始化账单</button>
                             @if (l.Status == LeaseStatus.Active)
                             {
                                 <button class="btn btn-sm btn-outline-warning" @onclick="() => End(l)">退租</button>
@@ -281,5 +351,120 @@ else
             await Db.SaveChangesAsync();
         }
         await LoadLeasesAsync();
+    }
+
+    // ───────────────────── 历史账单初始化（录入历史租约时按实际收款情况把账录平）─────────────────────
+    private Lease? initLease;
+    private List<Bill> initBills = new();
+    private List<InitRow> initRows = new();
+    private string? initErr, initOk;
+
+    private sealed class InitRow
+    {
+        public Bill Bill { get; set; } = default!;
+        public decimal Remaining { get; set; }
+        public DateTime? PaidDate { get; set; }
+        public decimal? Amount { get; set; }
+        public PaymentMethod Method { get; set; } = PaymentMethod.WeChat;
+    }
+
+    private async Task OpenInit(Lease l)
+    {
+        initLease = l;
+        initErr = initOk = null;
+        // 生效租约先补齐到当月的账单（幂等），确保历史月份都存在
+        if (l.Status == LeaseStatus.Active)
+            await Billing.EnsureBillsThroughAsync(new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1));
+        await ReloadInitAsync();
+    }
+
+    private async Task ReloadInitAsync()
+    {
+        if (initLease is null) return;
+        var cutoff = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1); // 含当月
+        var bills = await Db.Bills
+            .Include(b => b.Payments)
+            .Where(b => b.LeaseId == initLease.Id && b.PeriodStart < cutoff)
+            .OrderBy(b => b.PeriodStart)
+            .AsNoTracking()
+            .ToListAsync();
+        initBills = bills.Where(b => b.TotalAmount - b.PaidAmount > 0.001m).ToList();
+        initRows = initBills.Select(b => new InitRow
+        {
+            Bill = b,
+            Remaining = b.TotalAmount - b.PaidAmount,
+            Method = PaymentMethod.WeChat,
+        }).ToList();
+    }
+
+    private void FillAllInit()
+    {
+        foreach (var r in initRows)
+        {
+            r.Amount = r.Remaining;
+            r.PaidDate = r.Bill.DueDate > DateTime.Today ? DateTime.Today : r.Bill.DueDate;
+        }
+        initErr = initOk = null;
+    }
+
+    private void ClearInitRows()
+    {
+        foreach (var r in initRows)
+        {
+            r.Amount = null;
+            r.PaidDate = null;
+        }
+        initErr = initOk = null;
+    }
+
+    private void CloseInit()
+    {
+        initLease = null;
+        initBills = new();
+        initRows = new();
+        initErr = initOk = null;
+    }
+
+    private async Task SubmitInit()
+    {
+        initErr = initOk = null;
+        var jobs = new List<(InitRow Row, decimal Amount, DateTime PaidAt)>();
+        foreach (var r in initRows)
+        {
+            var amt = r.Amount ?? 0m;
+            if (amt <= 0m) continue;
+            if (amt > r.Remaining + 0.001m)
+            {
+                initErr = $"「{r.Bill.PeriodStart:yyyy-MM}」本次实收 ¥{amt:0.00} 超过剩余应收 ¥{r.Remaining:0.00}，请修正后再提交。";
+                return;
+            }
+            var date = r.PaidDate ?? (r.Bill.DueDate > DateTime.Today ? DateTime.Today : r.Bill.DueDate);
+            jobs.Add((r, amt, date));
+        }
+        if (jobs.Count == 0)
+        {
+            initErr = "请至少为一行填写「本次实收」金额（留空的月份保持未付欠款）。";
+            return;
+        }
+
+        decimal total = 0m;
+        try
+        {
+            foreach (var (row, amt, date) in jobs)
+            {
+                await Billing.RecordPaymentAsync(row.Bill.Id, amt, row.Method, date, "录入初始化");
+                total += amt;
+            }
+        }
+        catch (DomainException ex)
+        {
+            initErr = ex.Message + "（前面的收款已登记成功，请修正该行后重新提交剩余部分。）";
+            await ReloadInitAsync();
+            return;
+        }
+
+        var leftUnpaid = initRows.Count - jobs.Count;
+        initOk = $"已登记 {jobs.Count} 笔收款，合计 ¥{total:0.00}；{leftUnpaid} 张账单保持未付（欠款留账，可在报表「欠款一览」查看）。";
+        await ReloadInitAsync();
     }
 }
