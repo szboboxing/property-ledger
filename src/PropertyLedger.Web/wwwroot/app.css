@@ -156,3 +156,9 @@ table.data tbody td { padding: 10px 12px; vertical-align: middle; border-top: 1p
 
 /* 设置页危险操作区 */
 .danger-zone { border: 1px solid rgba(220, 38, 38, .35); background: #fef2f2; }
+
+/* 报表年份块：醒目标题条 + 独立卡片 */
+.year-block { overflow: hidden; }
+.year-block-header { background: var(--brand-soft); border-bottom: 1px solid var(--line); padding: .5rem 1rem; }
+.year-block-title { font-size: 1.15rem; font-weight: 800; color: var(--brand-dark); }
+.year-block-meta { font-size: .85rem; color: var(--muted, #667085); }

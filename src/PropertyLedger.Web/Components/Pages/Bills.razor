@@ -32,6 +32,10 @@
                 <input type="checkbox" class="form-check-input" id="showAll" @bind="showAll" />
                 <label class="form-check-label" for="showAll">显示全部月份</label>
             </div>
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="onlyManual" @bind="onlyManual" />
+                <label class="form-check-label" for="onlyManual">只看补录账单</label>
+            </div>
         </div>
     </div>
 </div>
@@ -148,6 +152,11 @@
             <strong>@selected.Room?.Name · @selected.Tenant?.Name · @selected.PeriodStart.ToString("yyyy-MM") 账单</strong>
             <button class="btn-close" @onclick="() => selected = null" aria-label="关闭"></button>
         </div>
+
+        @if (selected.IsManual)
+        {
+            <div class="section-hint mb-2">补录账单 · 录入于 @selected.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+        }
 
         <div class="row g-3">
             <div class="col-12 col-lg-7">
@@ -275,6 +284,7 @@
 
     private DateTime monthDate = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private bool showAll = false;
+    private bool onlyManual = false;
     private string statusFilter = "all";
 
     // 收款表单
@@ -336,6 +346,7 @@
             // 定位到补录起始月份，方便立刻看到
             monthDate = new DateTime(manualStart.Year, manualStart.Month, 1);
             showAll = false;
+            onlyManual = true;
             await LoadAsync();
         }
     }
@@ -346,6 +357,10 @@
         if (!showAll)
         {
             q = q.Where(b => b.PeriodStart.Year == monthDate.Year && b.PeriodStart.Month == monthDate.Month);
+        }
+        if (onlyManual)
+        {
+            q = q.Where(b => b.IsManual);
         }
         q = statusFilter switch
         {

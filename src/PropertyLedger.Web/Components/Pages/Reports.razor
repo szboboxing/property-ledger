@@ -41,43 +41,71 @@ else
         </div>
     </div>
 
-    <div class="card p-3 mb-3 d-flex gap-3 flex-wrap align-items-center">
-        <span class="badge-state st-unpaid">未付 @countUnpaid</span>
-        <span class="badge-state st-partial">部分已付 @countPartial</span>
-        <span class="badge-state st-paid">已结清 @countPaid</span>
-        <span class="badge-state st-overdue">已逾期 @countOverdue</span>
-        <span class="section-hint ms-auto">含自动出账与人工补录账单</span>
+    <div class="card p-3 mb-3">
+        <div class="d-flex gap-3 flex-wrap align-items-center">
+            <span class="badge-state st-unpaid">未付 @countUnpaid</span>
+            <span class="badge-state st-partial">部分已付 @countPartial</span>
+            <span class="badge-state st-paid">已结清 @countPaid</span>
+            <span class="badge-state st-overdue">已逾期 @countOverdue</span>
+            <span class="section-hint ms-auto">含自动出账与人工补录账单</span>
+        </div>
+        <div class="mt-2 pt-2 border-top d-flex gap-3 flex-wrap align-items-baseline">
+            <span class="fw-semibold">补录账单 @countManual 张：</span>
+            <span>应收 <b>¥@manualTotal.ToString("0.00")</b></span>
+            <span>已收 <b class="text-success">¥@manualPaid.ToString("0.00")</b></span>
+            <span>未收 <b class="text-danger">¥@manualDue.ToString("0.00")</b></span>
+            <span class="section-hint">人工补录的历史欠款，已计入上方应收 / 已收 / 未收合计</span>
+        </div>
     </div>
 
     <h5 class="mt-2 mb-2">按账期月份</h5>
-    <div class="table-wrap mb-4">
-        <table class="data">
-            <thead>
-                <tr><th>月份</th><th class="num">账单数</th><th class="num">应收</th><th class="num">已收</th><th class="num">未收</th><th class="num">收款率</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var m in Monthly)
-                {
-                    <tr>
-                        <td data-label="月份" class="fw-semibold">@m.Year.ToString() 年 @m.Month.ToString("00") 月</td>
-                        <td data-label="账单数" class="num">@m.Count</td>
-                        <td data-label="应收" class="num">¥@m.Total.ToString("0.00")</td>
-                        <td data-label="已收" class="num">¥@m.Paid.ToString("0.00")</td>
-                        <td data-label="未收" class="num @(m.Total - m.Paid > 0 ? "text-danger" : "")">¥@((m.Total - m.Paid).ToString("0.00"))</td>
-                        <td data-label="收款率" class="num">@RateOf(m.Total, m.Paid)</td>
-                    </tr>
-                }
-                <tr>
-                    <td data-label="月份" class="fw-bold">合计</td>
-                    <td data-label="账单数" class="num fw-bold">@scoped.Count()</td>
-                    <td data-label="应收" class="num fw-bold">¥@sumTotal.ToString("0.00")</td>
-                    <td data-label="已收" class="num fw-bold">¥@sumPaid.ToString("0.00")</td>
-                    <td data-label="未收" class="num fw-bold text-danger">¥@sumDue.ToString("0.00")</td>
-                    <td data-label="收款率" class="num fw-bold">@Rate</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+    @if (MonthYearBlocks.Count == 0)
+    {
+        <div class="card p-3 mb-3 empty no-label">当前筛选下没有账单。</div>
+    }
+    @foreach (var block in MonthYearBlocks)
+    {
+        <div class="card mb-3 year-block">
+            <div class="year-block-header d-flex flex-wrap align-items-baseline gap-3">
+                <span class="year-block-title">@block.Year 年</span>
+                <span class="year-block-meta">
+                    @block.Count 张账单 ·
+                    应收 <b>¥@block.Total.ToString("0.00")</b> ·
+                    已收 <b class="text-success">¥@block.Paid.ToString("0.00")</b> ·
+                    未收 <b class="text-danger">¥@block.Due.ToString("0.00")</b> ·
+                    收款率 @RateOf(block.Total, block.Paid)
+                </span>
+            </div>
+            <div class="table-wrap">
+                <table class="data">
+                    <thead>
+                        <tr><th>月份</th><th class="num">账单数</th><th class="num">应收</th><th class="num">已收</th><th class="num">未收</th><th class="num">收款率</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in block.Months)
+                        {
+                            <tr>
+                                <td data-label="月份" class="fw-semibold">@m.Month.ToString("00") 月</td>
+                                <td data-label="账单数" class="num">@(m.Count > 0 ? m.Count.ToString() : "—")</td>
+                                <td data-label="应收" class="num">¥@m.Total.ToString("0.00")</td>
+                                <td data-label="已收" class="num">¥@m.Paid.ToString("0.00")</td>
+                                <td data-label="未收" class="num @(m.Total - m.Paid > 0 ? "text-danger" : "")">¥@((m.Total - m.Paid).ToString("0.00"))</td>
+                                <td data-label="收款率" class="num">@RateOf(m.Total, m.Paid)</td>
+                            </tr>
+                        }
+                        <tr>
+                            <td data-label="月份" class="fw-bold">@block.Year 年合计</td>
+                            <td data-label="账单数" class="num fw-bold">@block.Count</td>
+                            <td data-label="应收" class="num fw-bold">¥@block.Total.ToString("0.00")</td>
+                            <td data-label="已收" class="num fw-bold">¥@block.Paid.ToString("0.00")</td>
+                            <td data-label="未收" class="num fw-bold text-danger">¥@block.Due.ToString("0.00")</td>
+                            <td data-label="收款率" class="num fw-bold">@RateOf(block.Total, block.Paid)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
 
     <h5 class="mt-2 mb-2">按物业</h5>
     <div class="table-wrap">
@@ -99,6 +127,17 @@ else
                         <td data-label="已收" class="num">¥@p.Paid.ToString("0.00")</td>
                         <td data-label="未收" class="num @(p.Total - p.Paid > 0 ? "text-danger" : "")">¥@((p.Total - p.Paid).ToString("0.00"))</td>
                         <td data-label="收款率" class="num">@RateOf(p.Total, p.Paid)</td>
+                    </tr>
+                }
+                @if (ByProperty.Count > 0)
+                {
+                    <tr>
+                        <td data-label="物业" class="fw-bold">合计</td>
+                        <td data-label="账单数" class="num fw-bold">@scoped.Count()</td>
+                        <td data-label="应收" class="num fw-bold">¥@sumTotal.ToString("0.00")</td>
+                        <td data-label="已收" class="num fw-bold">¥@sumPaid.ToString("0.00")</td>
+                        <td data-label="未收" class="num fw-bold text-danger">¥@sumDue.ToString("0.00")</td>
+                        <td data-label="收款率" class="num fw-bold">@Rate</td>
                     </tr>
                 }
             </tbody>
@@ -136,12 +175,38 @@ else
     private int countPaid => scoped.Count(b => b.Status == BillStatus.Paid);
     private int countOverdue => scoped.Count(b => b.IsOverdue(today));
 
+    // 补录账单小计（跟随年份筛选）
+    private int countManual => scoped.Count(b => b.IsManual);
+    private decimal manualTotal => scoped.Where(b => b.IsManual).Sum(b => b.TotalAmount);
+    private decimal manualPaid => scoped.Where(b => b.IsManual).Sum(b => b.PaidAmount);
+    private decimal manualDue => manualTotal - manualPaid;
+
     private sealed record MonthRow(int Year, int Month, int Count, decimal Total, decimal Paid);
 
-    private List<MonthRow> Monthly => scoped
+    // ── 按年份划块：每个年份一个独立块，含 12 个自然月 + 该年合计 ──
+    private sealed record YearBlock(int Year, List<MonthRow> Months, int Count, decimal Total, decimal Paid)
+    {
+        public decimal Due => Total - Paid;
+    }
+
+    private Dictionary<(int Year, int Month), MonthRow> monthLookup => all
         .GroupBy(b => (b.PeriodStart.Year, b.PeriodStart.Month))
-        .Select(g => new MonthRow(g.Key.Year, g.Key.Month, g.Count(), g.Sum(b => b.TotalAmount), g.Sum(b => b.PaidAmount)))
-        .OrderByDescending(r => r.Year).ThenByDescending(r => r.Month)
+        .ToDictionary(
+            g => g.Key,
+            g => new MonthRow(g.Key.Year, g.Key.Month, g.Count(), g.Sum(b => b.TotalAmount), g.Sum(b => b.PaidAmount)));
+
+    /// <summary>年份块列表：跟随顶部年份筛选，全部年份时所有年份倒序展示。</summary>
+    private List<YearBlock> MonthYearBlocks => scoped
+        .Select(b => b.PeriodStart.Year)
+        .Distinct()
+        .OrderByDescending(y => y)
+        .Select(y =>
+        {
+            var months = Enumerable.Range(1, 12)
+                .Select(m => monthLookup.GetValueOrDefault((y, m)) ?? new MonthRow(y, m, 0, 0m, 0m))
+                .ToList();
+            return new YearBlock(y, months, months.Sum(r => r.Count), months.Sum(r => r.Total), months.Sum(r => r.Paid));
+        })
         .ToList();
 
     private sealed record PropRow(string Name, int Count, decimal Total, decimal Paid);
