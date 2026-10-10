@@ -157,6 +157,9 @@ table.data tbody td { padding: 10px 12px; vertical-align: middle; border-top: 1p
 /* 设置页危险操作区 */
 .danger-zone { border: 1px solid rgba(220, 38, 38, .35); background: #fef2f2; }
 
+/* 账单批量结清确认区 */
+.batch-settle-zone { border: 1px solid rgba(22, 163, 74, .35); background: #f0fdf4; }
+
 /* 报表年份块：醒目标题条 + 独立卡片 */
 .year-block { overflow: hidden; }
 .year-block-header { background: var(--brand-soft); border-bottom: 1px solid var(--line); padding: .5rem 1rem; }

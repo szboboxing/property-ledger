@@ -253,6 +253,41 @@ public class BillingService
         await _db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// 批量结清：为指定账单逐张登记一笔金额 = 剩余应收的全额收款（备注「批量结清」），
+    /// 与单笔收款走同一套重算逻辑，报表已收金额同步增加；已结清/不存在的账单自动跳过。
+    /// 返回（结清张数，登记收款总额）。
+    /// </summary>
+    public async Task<(int Settled, decimal Total)> BatchSettleAsync(
+        IEnumerable<int> billIds, PaymentMethod method, DateTime paidAt, CancellationToken ct = default)
+    {
+        var settled = 0;
+        decimal total = 0m;
+
+        foreach (var id in billIds.Distinct())
+        {
+            var bill = await _db.Bills.Include(b => b.Payments)
+                .FirstOrDefaultAsync(b => b.Id == id, ct);
+            if (bill is null || bill.RemainingAmount <= 0m) continue;
+
+            var payment = new Payment
+            {
+                BillId = bill.Id,
+                Amount = bill.RemainingAmount,
+                PaidAt = paidAt,
+                Method = method,
+                Note = "批量结清",
+            };
+            _db.Payments.Add(payment);
+            Recalculate(bill);
+            settled++;
+            total += payment.Amount;
+        }
+
+        if (settled > 0) await _db.SaveChangesAsync(ct);
+        return (settled, total);
+    }
+
     // ───────────────────────── 杂费 / 金额重算 ─────────────────────────
 
     /// <summary>新增或更新杂费后，重算账单总额与状态。</summary>

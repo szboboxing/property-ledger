@@ -37,8 +37,52 @@
                 <label class="form-check-label" for="onlyManual">只看补录账单</label>
             </div>
         </div>
+        <div class="col-12 col-md-3 d-flex align-items-end">
+            <button type="button" class="btn btn-outline-success w-100" @onclick="() => showBatch = !showBatch"
+                    disabled="@(unsettled.Count == 0)" title="对当前筛选下的未结清账单批量登记全额收款">
+                一键结清未付（@unsettled.Count）
+            </button>
+        </div>
     </div>
 </div>
+
+@* ── 批量结清确认面板 ── *@
+@if (showBatch && unsettled.Count > 0)
+{
+    <div class="card p-3 mb-3 batch-settle-zone">
+        <div class="row g-2 align-items-end">
+            <div class="col-12">
+                <strong>批量结清</strong>
+                <span class="ms-2">将当前筛选下 <b>@unsettled.Count</b> 张未结清账单一次性登记全额收款，合计 <b>¥@unsettledTotal.ToString("0.00")</b></span>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label">收款日期</label>
+                <input type="date" class="form-control" @bind="batchDate" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label">收款方式</label>
+                <select class="form-select" @bind="batchMethod">
+                    <option value="@PaymentMethod.WeChat">微信</option>
+                    <option value="@PaymentMethod.Alipay">支付宝</option>
+                    <option value="@PaymentMethod.Bank">银行转账</option>
+                    <option value="@PaymentMethod.Cash">现金</option>
+                    <option value="@PaymentMethod.Other">其他</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3 d-flex align-items-end">
+                <button class="btn btn-success w-100" @onclick="SubmitBatch">确认结清</button>
+            </div>
+            <div class="col-6 col-md-3 d-flex align-items-end">
+                <button class="btn btn-outline-secondary w-100" @onclick="() => showBatch = false">取消</button>
+            </div>
+            <div class="col-12">
+                <div class="section-hint">
+                    为每张账单登记一笔金额 = 剩余应收的收款记录（备注「批量结清」），已结清的自动跳过；报表已收金额同步增加，操作后可在记账面板逐笔撤销。
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @* ── 补录过往账单（记录历史欠款，如接手前旧账） ── *@
 <div class="card p-3 mb-3">
@@ -306,9 +350,19 @@
     private decimal? manualAmount;
     private string? manualNote;
 
+    // 批量结清
+    private bool showBatch;
+    private DateTime batchDate = DateTime.Today;
+    private PaymentMethod batchMethod = PaymentMethod.WeChat;
+
     private string? Error, Ok;
 
     private List<Bill> filtered => ApplyFilter();
+
+    /// <summary>当前筛选下未结清的账单（批量结清的操作对象）。</summary>
+    private List<Bill> unsettled => filtered.Where(b => b.RemainingAmount > 0m).ToList();
+
+    private decimal unsettledTotal => unsettled.Sum(b => b.RemainingAmount);
 
     protected override async Task OnInitializedAsync()
     {
@@ -382,6 +436,22 @@
             .Include(b => b.Payments)
             .AsNoTracking()
             .ToListAsync();
+    }
+
+    private async Task SubmitBatch()
+    {
+        var ids = unsettled.Select(b => b.Id).ToList();
+        await RunSafe(async () =>
+        {
+            var (settled, total) = await Billing.BatchSettleAsync(ids, batchMethod, batchDate);
+            Ok = $"已批量结清 {settled} 张账单，合计 ¥{total:0.00}，报表已收金额同步增加。";
+            return true;
+        });
+        if (Error is null)
+        {
+            showBatch = false;
+            await LoadAsync();
+        }
     }
 
     private async Task RefreshAll()

@@ -169,4 +169,64 @@ public class BillingTests
         tracked.RentAmount = 1000m; // 已收 1500 > 新总额 1000 → 应拒绝
         Assert.Throws<DomainException>(() => BillingService.Recalculate(tracked));
     }
+
+    [Fact]
+    public async Task BatchSettle_SettlesAllUnpaidBills_Fully()
+    {
+        using var db = new TestDb();
+        await SeedLeaseAsync(db, new DateTime(2026, 9, 1));
+        var svc = new BillingService(db.Db);
+        await svc.EnsureBillsThroughAsync(new DateTime(2026, 10, 1)); // 9 / 10 两张
+        var ids = await db.Db.Bills.Select(b => b.Id).ToListAsync();
+
+        var (settled, total) = await svc.BatchSettleAsync(ids, PaymentMethod.WeChat, new DateTime(2026, 10, 10));
+
+        Assert.Equal(2, settled);
+        Assert.Equal(3000m, total);
+        var bills = await db.Db.Bills.Include(b => b.Payments).ToListAsync();
+        Assert.All(bills, b => Assert.Equal(BillStatus.Paid, b.Status));
+        Assert.All(bills, b => Assert.Equal(b.TotalAmount, b.PaidAmount));
+        Assert.All(bills, b =>
+        {
+            var pay = Assert.Single(b.Payments);
+            Assert.Equal("批量结清", pay.Note);
+            Assert.Equal(PaymentMethod.WeChat, pay.Method);
+        });
+    }
+
+    [Fact]
+    public async Task BatchSettle_SkipsSettled_AndTopsUpPartial()
+    {
+        using var db = new TestDb();
+        await SeedLeaseAsync(db, new DateTime(2026, 9, 1));
+        var svc = new BillingService(db.Db);
+        await svc.EnsureBillsThroughAsync(new DateTime(2026, 10, 1)); // 9 / 10 两张
+        var bills = await db.Db.Bills.OrderBy(b => b.PeriodStart).ToListAsync();
+
+        await svc.RecordPaymentAsync(bills[0].Id, 1500m, PaymentMethod.Cash, DateTime.Today, null); // 已结清
+        await svc.RecordPaymentAsync(bills[1].Id, 500m, PaymentMethod.Cash, DateTime.Today, null);  // 部分已付
+
+        var (settled, total) = await svc.BatchSettleAsync(
+            bills.Select(b => b.Id), PaymentMethod.Bank, DateTime.Today);
+
+        Assert.Equal(1, settled);           // 已结清的自动跳过
+        Assert.Equal(1000m, total);         // 部分已付的只补剩余
+        var after = await db.Db.Bills.OrderBy(b => b.PeriodStart).ToListAsync();
+        Assert.All(after, b => Assert.Equal(BillStatus.Paid, b.Status));
+    }
+
+    [Fact]
+    public async Task BatchSettle_EmptyOrUnknownIds_Noop()
+    {
+        using var db = new TestDb();
+        await SeedLeaseAsync(db, new DateTime(2026, 9, 1));
+        var svc = new BillingService(db.Db);
+        await svc.EnsureBillsThroughAsync(new DateTime(2026, 9, 1));
+
+        var (settled, total) = await svc.BatchSettleAsync(new[] { 999, 999 }, PaymentMethod.Cash, DateTime.Today);
+
+        Assert.Equal(0, settled);
+        Assert.Equal(0m, total);
+        Assert.Equal(0, await db.Db.Payments.CountAsync());
+    }
 }
