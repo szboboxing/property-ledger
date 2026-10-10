@@ -77,6 +77,82 @@ docker run -d --name propertyledger-web \
 
 升级：`docker pull ghcr.io/szboboxing/property-ledger:latest && docker rm -f propertyledger-web` 后重新执行第 3 步（数据在 `propertyledger-pgdata`、备注图片在 `propertyledger-uploads` 卷中，不受影响）。
 
+### 方式三：飞牛 NAS（fnOS）Compose 部署
+
+在 fnOS 的 Docker 管理界面「Compose」中新增项目，粘贴以下配置（端口与密码按需修改）：
+
+```yaml
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: propertyledger-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: property
+      POSTGRES_PASSWORD: property
+      POSTGRES_DB: propertyledger
+      TZ: Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U property -d propertyledger"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - internal
+
+  web:
+    image: ghcr.io/szboboxing/property-ledger:latest
+    container_name: propertyledger-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Default: Host=db;Port=5432;Database=propertyledger;Username=property;Password=property
+      TZ: Asia/Shanghai
+    ports:
+      - "8180:8080"
+    volumes:
+      - uploads:/app/uploads
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  uploads:
+
+networks:
+  internal:
+```
+
+部署完成后浏览器访问 `http://NAS地址:8180`（默认账号 `admin / admin123`，首次登录请改密），进入「设置」页可粘贴微信/支付宝收款码。
+
+#### NAS 拉不动镜像时：离线导入
+
+部分网络环境拉取 GHCR / Docker Hub 会一直卡在 Retrying，此时在一台能正常访问 Docker 仓库的电脑上离线导入：
+
+```bash
+# 1) 电脑上获取两个镜像：直接拉取，或 clone 本仓库后本地构建
+docker pull ghcr.io/szboboxing/property-ledger:latest
+docker pull postgres:17-alpine
+# （或）docker build -t ghcr.io/szboboxing/property-ledger:latest .
+
+# 2) 导出为 tar（镜像层本身已压缩，无需再 gzip）
+docker save -o images.tar ghcr.io/szboboxing/property-ledger:latest postgres:17-alpine
+
+# 3) 上传到 NAS（SSH 端口非 22 时 scp 加 -P 端口号）
+scp images.tar 用户名@NAS地址:/vol1/1000/docker/
+```
+
+```bash
+# 4) NAS 上导入（fnOS 终端或 SSH）
+docker load -i /vol1/1000/docker/images.tar
+
+# 5) 回到 fnOS Docker 界面按上面的 Compose 配置重新部署——镜像已在本地，不再联网拉取
+```
+
 ### 数据备份与恢复
 
 数据全部保存在 PostgreSQL 数据卷中，与容器无关：
@@ -88,13 +164,6 @@ docker exec propertyledger-db pg_dump -U property propertyledger > backup-$(date
 # 恢复
 cat backup-20261009.sql | docker exec -i propertyledger-db psql -U property propertyledger
 ```
-
-## 飞牛 NAS（fnOS）部署
-
-1. 在 NAS 上创建目录，放入本仓库的 `docker-compose.yml`（SSH 上传，或在 fnOS 文件管理器中新建）
-2. SSH 进入该目录执行 `docker compose up -d`，也可在 fnOS 的 Docker 管理界面「Compose」中导入该文件
-3. 浏览器访问 `http://NAS地址:8080`
-4. 上传收款码：登录后进入「设置」页粘贴微信/支付宝收款码图片
 
 ## 本地开发
 
