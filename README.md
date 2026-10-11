@@ -122,7 +122,6 @@ services:
       - "8180:8080"
     volumes:
       - uploads:/app/uploads
-      # 在线升级（v1.9+）：挂载 docker.sock 后可在应用内一键升级
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - internal
@@ -135,7 +134,7 @@ networks:
   internal:
 ```
 
-部署完成后浏览器访问 `http://NAS地址:8180`（默认账号 `admin / admin123`，首次登录请改密），进入「设置」页可粘贴微信/支付宝收款码。
+部署完成后浏览器访问 `http://NAS地址:8180`（默认账号 `admin / admin123`，首次登录请改密），进入「设置」页可粘贴微信/支付宝收款码。web 服务已挂载 `/var/run/docker.sock`，v1.9+ 起可在应用内「设置 → 软件更新」一键升级。
 
 #### NAS 拉不动镜像时：离线导入
 
