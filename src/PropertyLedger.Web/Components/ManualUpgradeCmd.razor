@@ -1,0 +1,22 @@
+@* 手动升级命令兜底（未挂载 docker.sock 或一键升级失败时展示，一键复制） *@
+@inject IJSRuntime JS
+
+<div class="manual-cmd">
+    <span>在 docker-compose.yml 所在目录执行：</span>
+    <code>docker compose pull web &amp;&amp; docker compose up -d web</code>
+    <button class="btn btn-sm btn-outline-secondary" @onclick="Copy">@(copied ? "已复制 ✓" : "复制")</button>
+</div>
+
+@code {
+    private bool copied;
+
+    private async Task Copy()
+    {
+        await JS.InvokeVoidAsync("updateUtil.copy", "docker compose pull web && docker compose up -d web");
+        copied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        copied = false;
+        StateHasChanged();
+    }
+}

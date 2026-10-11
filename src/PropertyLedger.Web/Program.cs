@@ -24,7 +24,11 @@ builder.Services.AddScoped<BillingService>();
 builder.Services.AddScoped<MaintenanceService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<KnowledgeService>();
 builder.Services.AddSingleton<BillImageRenderer>();
+// 在线升级：版本检查全局缓存（单例），Docker 升级按容器状态单例
+builder.Services.AddSingleton(new UpdateService(AppVersion.Current));
+builder.Services.AddSingleton<DockerUpgradeService>();
 
 // ── Cookie 认证（多标签共享、刷新不掉线，适合内网工具）──
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -79,6 +83,9 @@ app.MapBillImageEndpoints();
 
 // 富文本备注插图的上传 / 查看
 app.MapUploadEndpoints();
+
+// 在线升级：健康检查 / 检查更新 / 一键升级
+app.MapUpdateEndpoints();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

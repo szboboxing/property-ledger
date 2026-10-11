@@ -12,6 +12,7 @@
                     <NavMenuLinks User="context.User" />
                 </nav>
                 <div class="sidebar-foot">
+                    <UpdateBadge />
                     <div class="sidebar-user">
                         <div class="name">@context.User.Identity?.Name</div>
                         <div class="role">@(context.User.IsInRole("Admin") ? "总管理员" : "普通用户")</div>
@@ -26,6 +27,8 @@
                 <header class="app-topbar">
                     <label for="nav-toggle" class="burger" aria-label="打开菜单">☰</label>
                     <span class="title">物业管理台账</span>
+                    <span class="topbar-spacer"></span>
+                    <UpdateBadge />
                 </header>
 
                 <main class="app-main">

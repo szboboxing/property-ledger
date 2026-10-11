@@ -1,0 +1,43 @@
+@* 顶栏/侧边栏新版本提示：仅总管理员可见，点击进入设置页升级。
+   检查结果由 UpdateService 全局缓存（6 小时），页面加载不阻塞。 *@
+@inject UpdateService Updates
+@inject AuthenticationStateProvider AuthState
+
+@if (isAdmin && cached?.HasUpdate == true)
+{
+    <a class="update-badge" href="settings#update"
+       title="发现新版本 v@(cached!.LatestVersion)（当前 v@(cached!.CurrentVersion)），点击去设置页升级">
+        ⬆ 新版本 v@(cached!.LatestVersion)
+    </a>
+}
+
+@code {
+    private UpdateCheckResult? cached;
+    private bool isAdmin;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var auth = await AuthState.GetAuthenticationStateAsync();
+            isAdmin = auth.User.IsInRole("Admin");
+        }
+        catch { /* 未登录等场景静默跳过 */ }
+
+        cached = Updates.PeekCached();
+        if (isAdmin)
+        {
+            _ = RefreshAsync();
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            cached = await Updates.CheckAsync();
+        }
+        catch { /* 网络不可达时静默跳过，不打扰用户 */ }
+        await InvokeAsync(StateHasChanged);
+    }
+}

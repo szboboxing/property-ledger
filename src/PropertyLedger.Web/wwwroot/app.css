@@ -165,3 +165,39 @@ table.data tbody td { padding: 10px 12px; vertical-align: middle; border-top: 1p
 .year-block-header { background: var(--brand-soft); border-bottom: 1px solid var(--line); padding: .5rem 1rem; }
 .year-block-title { font-size: 1.15rem; font-weight: 800; color: var(--brand-dark); }
 .year-block-meta { font-size: .85rem; color: var(--muted, #667085); }
+
+/* 顶栏 / 侧边栏新版本提示徽章 */
+.topbar-spacer { flex: 1; }
+.update-badge {
+    display: block; margin-bottom: 8px; padding: 6px 10px; border-radius: 10px;
+    background: #fef3c7; color: #92400e; font-weight: 600; font-size: .85rem; text-align: center;
+    border: 1px solid #fde68a;
+}
+.app-topbar .update-badge {
+    margin-bottom: 0; padding: 3px 10px; border-radius: 999px; font-size: .8rem;
+    background: rgba(255, 255, 255, .2); color: #fff; border-color: rgba(255, 255, 255, .35); white-space: nowrap;
+}
+
+/* 设置页 · 软件更新 */
+.update-found { border: 1px solid rgba(22, 163, 74, .3); background: #f0fdf4; border-radius: 12px; padding: 12px 14px; }
+.update-notes {
+    background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; margin: 10px 0 0; max-height: 220px; overflow: auto;
+    font-size: .84rem; white-space: pre-wrap; word-break: break-word;
+}
+.upgrade-confirm { margin-top: 12px; border: 1px solid rgba(220, 38, 38, .3); background: #fff; border-radius: 12px; padding: 12px 14px; }
+.upgrade-progress { border: 1px solid rgba(15, 118, 110, .35); background: #f0fdfa; border-radius: 12px; padding: 12px 14px; }
+.manual-cmd {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    background: #f8fafc; border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px;
+    font-size: .86rem; color: var(--muted);
+}
+.manual-cmd code {
+    background: #1f2937; color: #f9fafb; border-radius: 8px; padding: 6px 10px;
+    font-size: .84rem; user-select: all;
+}
+
+/* 租约页 · 经验库 */
+.kb-item { border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 10px 12px; margin-bottom: 10px; }
+.kb-item:last-child { margin-bottom: 0; }
+.kb-source-hint { border: 1px solid rgba(22, 163, 74, .35); background: #f0fdf4; color: var(--ok); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: .9rem; }

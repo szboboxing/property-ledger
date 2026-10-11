@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<Setting> Settings => Set<Setting>();
+    public DbSet<KnowledgeEntry> Knowledge => Set<KnowledgeEntry>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -119,6 +120,15 @@ public class AppDbContext : DbContext
         {
             e.HasKey(s => s.Key);
             e.Property(s => s.Key).HasMaxLength(64);
+        });
+
+        b.Entity<KnowledgeEntry>(e =>
+        {
+            e.Property(k => k.Title).IsRequired().HasMaxLength(100);
+            e.Property(k => k.Category).HasConversion<string>().HasMaxLength(20);
+            e.HasOne(k => k.Lease).WithMany().HasForeignKey(k => k.LeaseId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(k => k.Category);
+            e.HasIndex(k => k.CreatedAt);
         });
     }
 }

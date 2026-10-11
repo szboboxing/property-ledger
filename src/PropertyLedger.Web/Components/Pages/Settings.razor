@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "Feature:settings")]
 @rendermode InteractiveServer
 @inject SettingsService SettingsSvc
+@implements IDisposable
 
 <PageTitle>设置</PageTitle>
 
@@ -9,6 +10,99 @@
 
 @if (Error is not null) { <div class="alert alert-danger py-2 px-3">@Error</div> }
 @if (Ok is not null) { <div class="alert alert-success py-2 px-3">@Ok</div> }
+
+<div class="card p-4 mb-3" id="update">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h5 class="mb-0">软件更新</h5>
+        <span class="badge-state st-neutral">当前版本 v@(AppVersion.Current)</span>
+    </div>
+    <div class="section-hint mt-1 mb-3">
+        检查 GitHub 仓库的最新 Release；发现新版本后可一键升级（自动拉取新镜像并重建容器，数据与设置不受影响）。
+    </div>
+
+    @if (upgradePhase is "started" or "polling")
+    {
+        <div class="upgrade-progress">
+            <div class="fw-semibold">⏳ 正在升级：拉取新镜像并重建 web 容器…</div>
+            <div class="section-hint mt-1">
+                容器会自动重启（通常 1–3 分钟），期间服务短暂不可用；恢复后本页将自动刷新。此页可以先关闭，不影响升级。
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <button class="btn btn-brand" @onclick="CheckUpdate" disabled="@checking">
+                @(checking ? "检查中…" : (updateResult is null ? "检查更新" : "重新检查"))
+            </button>
+            @if (updateResult is not null && !updateResult.HasUpdate)
+            {
+                <span class="fw-semibold" style="color:var(--ok)">已是最新版本 ✓</span>
+            }
+        </div>
+    }
+
+    @if (checkErr is not null)
+    {
+        <div class="alert alert-danger py-2 px-3 mt-2 mb-0">@checkErr</div>
+    }
+
+    @if (updateResult is not null && updateResult.HasUpdate && upgradePhase is not ("started" or "polling"))
+    {
+        <div class="update-found mt-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <span class="fw-bold">发现新版本 v@(updateResult.LatestVersion)</span>
+                    <span class="section-hint ms-2">
+                        当前 v@(updateResult.CurrentVersion)@(updateResult.PublishedAt is null ? "" : " · 发布于 " + updateResult.PublishedAt.Value.ToString("yyyy-MM-dd"))
+                    </span>
+                </div>
+                @if (updateResult.ReleaseUrl is not null)
+                {
+                    <a href="@updateResult.ReleaseUrl" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">查看 Release ↗</a>
+                }
+            </div>
+            @if (updateResult.ReleaseNotes is not null)
+            {
+                <pre class="update-notes">@updateResult.ReleaseNotes</pre>
+            }
+
+            @if (upgradePhase == "confirm")
+            {
+                <div class="upgrade-confirm">
+                    <div class="fw-semibold mb-1">确认升级到 v@(updateResult.LatestVersion)？</div>
+                    <div class="section-hint mb-2">
+                        升级容器将自动拉取新镜像并重建 web 容器，期间服务短暂中断（约 1–3 分钟），数据库与上传图片数据不受影响。
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-danger" @onclick="StartUpgrade">开始升级</button>
+                        <button class="btn btn-outline-secondary" @onclick="CancelUpgrade">取消</button>
+                    </div>
+                </div>
+            }
+            else if (upgradePhase == "done")
+            {
+                <div class="alert alert-success py-2 px-3 mt-2 mb-0">@(upgradeMsg ?? "升级完成。")</div>
+            }
+            else if (upgradePhase == "failed")
+            {
+                <div class="alert alert-danger py-2 px-3 mt-2 mb-2">@(upgradeMsg ?? "升级未完成。")</div>
+                <ManualUpgradeCmd />
+            }
+            else if (canAuto)
+            {
+                <div class="mt-2"><button class="btn btn-brand" @onclick="AskUpgrade">一键升级</button></div>
+            }
+            else
+            {
+                <div class="alert alert-warning py-2 px-3 mt-2 mb-2">
+                    当前部署未挂载 docker.sock（或非 Docker 部署），无法应用内一键升级；请在部署机上手动执行：
+                </div>
+                <ManualUpgradeCmd />
+            }
+        </div>
+    }
+</div>
 
 <div class="card p-4 mb-3">
     <div class="mb-3">
@@ -78,6 +172,19 @@
     [Inject] private AuthenticationStateProvider AuthState { get; set; } = default!;
     [Inject] private MaintenanceService Maintenance { get; set; } = default!;
     [Inject] private Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env { get; set; } = default!;
+    [Inject] private UpdateService Updates { get; set; } = default!;
+    [Inject] private DockerUpgradeService Upgrader { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    // ── 软件更新 ──
+    private UpdateCheckResult? updateResult;
+    private bool checking;
+    private string? checkErr;
+    private bool canAuto;
+    /// <summary>none=未开始 confirm=待确认 started=启动中 polling=浏览器轮询中 done=成功 failed=失败</summary>
+    private string upgradePhase = "none";
+    private string? upgradeMsg;
+    private DotNetObjectReference<Settings>? upgradeWatchRef;
 
     protected override async Task OnInitializedAsync()
     {
@@ -91,7 +198,105 @@
         landlord = s.GetValueOrDefault(SettingKeys.LandlordName) ?? "";
         notice = s.GetValueOrDefault(SettingKeys.PaymentNotice) ?? "";
         qrDataUri = s.GetValueOrDefault(SettingKeys.PayQrCode);
+
+        canAuto = Upgrader.CanAutoUpgrade;
+        // 有新鲜缓存就先展示，后台再刷新一次（首页/侧边栏已触发的检查可复用）
+        var cached = Updates.PeekCached();
+        if (cached is not null)
+        {
+            updateResult = cached;
+            _ = RefreshUpdateAsync();
+        }
     }
+
+    private async Task RefreshUpdateAsync()
+    {
+        try
+        {
+            updateResult = await Updates.CheckAsync();
+            checkErr = null;
+        }
+        catch (Exception ex)
+        {
+            checkErr = "检查更新失败：" + ex.Message;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CheckUpdate()
+    {
+        checking = true;
+        checkErr = null;
+        StateHasChanged();
+        try
+        {
+            updateResult = await Updates.CheckAsync(force: true);
+        }
+        catch (Exception ex)
+        {
+            checkErr = "检查更新失败：" + ex.Message;
+        }
+        finally
+        {
+            checking = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void AskUpgrade()
+    {
+        upgradePhase = "confirm";
+        upgradeMsg = null;
+    }
+
+    private void CancelUpgrade() => upgradePhase = "none";
+
+    private async Task StartUpgrade()
+    {
+        upgradePhase = "started";
+        upgradeMsg = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var (started, message) = await Upgrader.StartUpgradeAsync();
+            if (started)
+            {
+                upgradePhase = "polling";
+                upgradeWatchRef?.Dispose();
+                upgradeWatchRef = DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("updateWatcher.start", updateResult?.LatestVersion ?? AppVersion.Current, upgradeWatchRef);
+            }
+            else
+            {
+                upgradePhase = "failed";
+                upgradeMsg = message;
+            }
+        }
+        catch (Exception ex)
+        {
+            upgradePhase = "failed";
+            upgradeMsg = "启动升级失败：" + ex.Message;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnUpgradeSucceeded(string version)
+    {
+        upgradePhase = "done";
+        upgradeMsg = $"已成功升级到 v{version}，页面即将自动刷新。";
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnUpgradeTimeout()
+    {
+        upgradePhase = "failed";
+        upgradeMsg = "等待超时：升级容器可能被网络卡在拉取镜像上。可稍后在部署机执行 docker logs propertyledger-upgrader 查看进度，或直接手动执行下方命令。";
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => upgradeWatchRef?.Dispose();
 
     private async Task WipeData()
     {

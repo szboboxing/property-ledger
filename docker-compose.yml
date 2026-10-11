@@ -34,6 +34,9 @@ services:
       - "${WEB_PORT:-8080}:8080"
     volumes:
       - uploads:/app/uploads   # 富文本备注图片持久化
+      # 在线升级（v1.9+）：应用通过 docker.sock 创建一次性升级容器，自动 pull 新镜像并重建本容器；
+      # 不挂载 sock 时应用内一键升级不可用（设置页会显示手动命令），按需移除本行
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - internal
 

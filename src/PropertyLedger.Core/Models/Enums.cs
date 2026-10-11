@@ -56,6 +56,19 @@ public enum PropertyType
     Apartment = 2,
 }
 
+/// <summary>经验库条目类别</summary>
+public enum KnowledgeCategory
+{
+    /// <summary>出租经验（签约 / 新建租约）</summary>
+    Rental = 0,
+
+    /// <summary>退租经验</summary>
+    Termination = 1,
+
+    /// <summary>其他</summary>
+    Other = 2,
+}
+
 /// <summary>枚举的中文显示名（界面统一从这里取，避免各页硬编码）。</summary>
 public static class EnumLabels
 {
@@ -68,4 +81,14 @@ public static class EnumLabels
         };
 
     public static string Name(PropertyType t) => PropertyTypes[t];
+
+    public static readonly IReadOnlyDictionary<KnowledgeCategory, string> KnowledgeCategories =
+        new Dictionary<KnowledgeCategory, string>
+        {
+            [KnowledgeCategory.Rental] = "出租经验",
+            [KnowledgeCategory.Termination] = "退租经验",
+            [KnowledgeCategory.Other] = "其他",
+        };
+
+    public static string Name(KnowledgeCategory c) => KnowledgeCategories[c];
 }

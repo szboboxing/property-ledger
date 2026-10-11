@@ -15,6 +15,8 @@ A landlord's ledger: properties → rooms → tenants → leases → automatic m
 - 报表：应收 / 已收 / 未收 / 收款率总览，按账期月份（按年份分页，每页 12 个自然月）与按物业分组统计（含合计行），补录账单独行小计，支持按年份筛选；**欠款一览**按租客列出全部未收清账单（账期 / 到期 / 未收 / 逾期天数，含合计行，不受年份筛选影响，支持每页 10/20/30/50/100 条分页与上一页 / 下一页）
 - 账单杂费自定义、部分收款、状态自动迁移（未付 / 部分已付 / 已结清）；支持按当前筛选**一键批量结清**未付账单（登记全额收款记录，可逐笔撤销）
 - 富文本备注：物业 / 房间 / 租客 / 租约 / 账单备注均支持加粗、斜体、下划线与**上传图片**（登录可见，文件落库外存储并随数据卷持久化）
+- **经验库**（租约页）：签约 / 退租时的想法、经验与注意事项沉淀，富文本 + 插图，可按类别（出租经验 / 退租经验 / 其他）与关键字检索、可关联租约；新建租约、办理退租后自动弹出预填表单，随手记录（可跳过）
+- **在线升级**：设置页一键检查 GitHub 最新 Release，发现新版本可**应用内一键升级**（Docker Compose 部署时自动拉取新镜像并重建容器，数据不受影响；需挂载 docker.sock，未挂载时显示手动命令）；侧边栏 / 顶栏自动出现「新版本」提示徽章
 - 账单图片导出（SkiaSharp 中文渲染 + 收款二维码），手机保存后微信转发
 - 桌面常驻侧边栏（彩色图标导航），手机端抽屉菜单，移动端自适应
 - 多用户登录（PBKDF2 密码哈希，首建总管理员 `admin / admin123`）
@@ -24,7 +26,7 @@ A landlord's ledger: properties → rooms → tenants → leases → automatic m
 - ASP.NET Core **Blazor Server**（.NET 10 LTS）
 - **EF Core 10 + PostgreSQL 17**（Npgsql）
 - **SkiaSharp** 账单图片渲染（MIT 许可）
-- xunit 单元测试（44 个用例）
+- xunit 单元测试（69 个用例）
 - Docker 多架构镜像（amd64 / arm64），推送 GHCR
 
 ## 部署 Deployment
@@ -43,7 +45,10 @@ docker compose up -d
 
 打开 `http://localhost:8080`（NAS 上换成 `http://NAS地址:8080`），默认账号 `admin / admin123`（首次登录请改密）。
 
-升级到新版本：`docker compose pull && docker compose up -d`。
+升级到新版本：
+
+- **应用内一键升级（v1.9+，推荐）**：web 服务挂载了 `/var/run/docker.sock`（仓库 compose 已含该行）时，登录后进入「设置 → 软件更新」点「检查更新」，发现新版本点「一键升级」即可，应用会自动拉取新镜像并重建容器，数据不受影响。若是从旧版本（未挂载 sock）升级到 v1.9，请先在 compose 的 web 服务 `volumes` 中加上 `- /var/run/docker.sock:/var/run/docker.sock` 并执行一次 `docker compose up -d`，以后即可在应用内直接升级
+- **手动升级**：`docker compose pull && docker compose up -d`
 
 ### 方式二：Docker 原生命令
 
@@ -116,6 +121,8 @@ services:
       - "8180:8080"
     volumes:
       - uploads:/app/uploads
+      # 在线升级（v1.9+）：挂载 docker.sock 后可在应用内一键升级
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - internal
 
@@ -188,6 +195,12 @@ ghcr.io/szboboxing/property-ledger:latest
 推送 `v*.*` 标签触发 GitHub Actions：先跑测试，再多架构构建并推送 GHCR。
 
 ## 更新日志 Changelog
+
+### v1.9（2026-10-11）
+- **在线升级**：设置页新增「软件更新」区块——一键检查 GitHub 仓库最新 Release（结果缓存 6 小时，接口限流友好），发现新版本显示更新说明与 Release 链接；Docker Compose 部署且挂载 docker.sock 时支持**应用内一键升级**：应用通过 Docker Engine API 创建一次性升级容器（docker:cli），自动 `docker compose pull web` + `up -d web` 拉取新镜像并重建 web 容器，前端轮询 `/healthz` 探测恢复与新版本号后自动刷新；未挂载 sock / 非 Compose 部署 / 升级失败时展示手动命令（一键复制）兜底；侧边栏与顶栏对总管理员显示「⬆ 新版本」提示徽章
+- **经验库**（租约模块）：签约 / 退租的想法与经验沉淀——富文本内容（加粗 / 斜体 / 下划线 / 插图，与备注同一套编辑器）、类别（出租经验 / 退租经验 / 其他）、可选关联租约；支持关键字（标题 / 正文）与类别检索、查看展开 / 收起、编辑、删除；**新建租约保存后、办理退租后自动弹出预填表单**（标题、类别、关联租约自动带出），可跳过不记
+- 数据库迁移新增 Knowledge 表（关联租约删除时自动置空）；NAS / Compose 模板新增 docker.sock 挂载说明（老部署加一行 `- /var/run/docker.sock:/var/run/docker.sock` 并 `up -d` 一次即可启用一键升级）
+- 单元测试 47 → 69（经验库增删改查 / 校验 / 检索、版本比较与 Release JSON 解析），全部通过
 
 ### v1.8（2026-10-10）
 - 租约押金拆分为**房屋押金 + 水电押金**：录入 / 编辑表单两个独立输入框，列表押金列显示「房屋 ¥x / 水电 ¥y」两行；数据库迁移将原「押金」列原值重命名为房屋押金（历史数据无损），水电押金新增默认 0

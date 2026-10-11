@@ -166,6 +166,47 @@ namespace PropertyLedger.Web.Data.Migrations
                     b.ToTable("BillItems");
                 });
 
+            modelBuilder.Entity("PropertyLedger.Core.Models.KnowledgeEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Content")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("LeaseId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("LeaseId");
+
+                    b.ToTable("Knowledge");
+                });
+
             modelBuilder.Entity("PropertyLedger.Core.Models.Lease", b =>
                 {
                     b.Property<int>("Id")
@@ -420,6 +461,16 @@ namespace PropertyLedger.Web.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Bill");
+                });
+
+            modelBuilder.Entity("PropertyLedger.Core.Models.KnowledgeEntry", b =>
+                {
+                    b.HasOne("PropertyLedger.Core.Models.Lease", "Lease")
+                        .WithMany()
+                        .HasForeignKey("LeaseId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Lease");
                 });
 
             modelBuilder.Entity("PropertyLedger.Core.Models.Lease", b =>

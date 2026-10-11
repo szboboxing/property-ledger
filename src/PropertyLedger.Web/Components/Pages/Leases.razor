@@ -3,6 +3,7 @@
 @rendermode InteractiveServer
 @inject AppDbContext Db
 @inject BillingService Billing
+@inject KnowledgeService Knowledge
 
 <PageTitle>租约管理</PageTitle>
 
@@ -160,6 +161,109 @@ else
         </div>
     }
 
+    <div class="card p-3 mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <div>
+                <strong>经验库</strong>
+                <span class="section-hint ms-2">签约 / 退租中的想法与经验，沉淀下来下次少踩坑</span>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <input type="search" class="form-control form-control-sm" style="max-width:200px"
+                       placeholder="搜索标题 / 内容" @bind="kbKeyword" @bind:after="LoadKnowledgeAsync" />
+                <select class="form-select form-select-sm" style="max-width:120px" @bind="kbCategoryFilter" @bind:after="LoadKnowledgeAsync">
+                    <option value="">全部类别</option>
+                    <option value="@nameof(KnowledgeCategory.Rental)">出租经验</option>
+                    <option value="@nameof(KnowledgeCategory.Termination)">退租经验</option>
+                    <option value="@nameof(KnowledgeCategory.Other)">其他</option>
+                </select>
+                <button class="btn btn-sm btn-outline-primary" @onclick="OpenKnowledgeNew">＋ 新建经验</button>
+            </div>
+        </div>
+
+        @if (kbFormOpen)
+        {
+            <div class="border rounded p-3 mb-3">
+                @if (kbSourceHint is not null)
+                {
+                    <div class="kb-source-hint">@kbSourceHint</div>
+                }
+                <div class="row g-2">
+                    <div class="col-12 col-md-5">
+                        <label class="form-label">标题 *</label>
+                        <input class="form-control" @bind="kbForm.Title" placeholder="如：商铺签约要重点确认免租期与递增条款" />
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label">类别</label>
+                        <select class="form-select" @bind="kbForm.Category">
+                            <option value="@KnowledgeCategory.Rental">出租经验</option>
+                            <option value="@KnowledgeCategory.Termination">退租经验</option>
+                            <option value="@KnowledgeCategory.Other">其他</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <label class="form-label">关联租约</label>
+                        <select class="form-select" @bind="kbForm.LeaseId">
+                            <option value="">不关联</option>
+                            @foreach (var l in leases)
+                            {
+                                <option value="@l.Id">@(leaseLabelById.GetValueOrDefault(l.Id, $"租约 #{l.Id}"))</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">内容（支持富文本 / 上传图片）</label>
+                        <RichNoteEditor @bind-Value="kbForm.Content" Placeholder="记录想法、经验、注意事项，可插入图片" Height="140" />
+                    </div>
+                </div>
+                @if (kbErr is not null)
+                {
+                    <div class="alert alert-danger py-2 px-3 mt-2 mb-0">@kbErr</div>
+                }
+                <div class="d-flex gap-2 mt-2">
+                    <button class="btn btn-brand" @onclick="SaveKnowledge">保存到经验库</button>
+                    <button class="btn btn-outline-secondary" @onclick="CloseKnowledgeForm">@(kbSourceHint is null ? "取消" : "跳过，不记录")</button>
+                </div>
+            </div>
+        }
+
+        @if (kbItems.Count == 0)
+        {
+            <div class="empty">@(kbLoaded ? "经验库还是空的。签约、退租时有什么想法，都可以记到这里。" : "加载中…")</div>
+        }
+        else
+        {
+            @foreach (var k in kbItems)
+            {
+                <div class="kb-item">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <span class="badge-state @(KbBadge(k.Category))">@EnumLabels.Name(k.Category)</span>
+                            <strong class="ms-1">@k.Title</strong>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="section-hint">@(k.UpdatedAt.Date == k.CreatedAt.Date ? k.CreatedAt.ToString("yyyy-MM-dd") : k.UpdatedAt.ToString("yyyy-MM-dd 编辑"))</span>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleKnowledge(k.Id)">@(kbExpanded.Contains(k.Id) ? "收起" : "查看")</button>
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => OpenKnowledgeEdit(k)">编辑</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteKnowledge(k)">删除</button>
+                        </div>
+                    </div>
+                    @if (k.LeaseId is not null && leaseLabelById.TryGetValue(k.LeaseId.Value, out var lbl))
+                    {
+                        <div class="section-hint mt-1">关联租约：@lbl</div>
+                    }
+                    @if (kbExpanded.Contains(k.Id))
+                    {
+                        <div class="rich-view mt-2">@((MarkupString)(k.Content ?? ""))</div>
+                    }
+                    else
+                    {
+                        <div class="section-hint mt-1">@HtmlText.Excerpt(k.Content, 60)</div>
+                    }
+                </div>
+            }
+        }
+    </div>
+
     <div class="table-wrap">
         <table class="data">
             <thead>
@@ -249,6 +353,7 @@ else
         rooms = await Db.Rooms.Include(r => r.Property).OrderBy(r => r.PropertyId).ThenBy(r => r.Id).AsNoTracking().ToListAsync();
         tenants = await Db.Tenants.OrderBy(t => t.Id).AsNoTracking().ToListAsync();
         await LoadLeasesAsync();
+        await LoadKnowledgeAsync();
         var firstRoom = rooms.FirstOrDefault(r => !r.IsArchived) ?? rooms.FirstOrDefault();
         if (firstRoom is not null)
         {
@@ -265,6 +370,9 @@ else
             .Include(l => l.Tenant)
             .OrderByDescending(l => l.Status).ThenByDescending(l => l.StartDate)
             .AsNoTracking().ToListAsync();
+        leaseLabelById = leases.ToDictionary(
+            l => l.Id,
+            l => $"{l.Room?.Property?.Name} · {l.Room?.Name} · {l.Tenant?.Name}");
     }
 
     private void Edit(Lease l)
@@ -308,14 +416,18 @@ else
                 l.RoomId == form.RoomId && l.Status == LeaseStatus.Active);
             if (conflict) { Error = "该房间已有生效中的租约，请先对原租约办理退租。"; return; }
 
-            Db.Leases.Add(new Lease
+            var created = new Lease
             {
                 RoomId = form.RoomId, TenantId = form.TenantId,
                 StartDate = form.StartDate, EndDate = end,
                 RentAmount = form.RentAmount, HouseDeposit = form.HouseDeposit, UtilityDeposit = form.UtilityDeposit,
                 PaymentDay = form.PaymentDay, PaymentCycle = form.Cycle, Note = form.Note,
                 Status = LeaseStatus.Active,
-            });
+            };
+            Db.Leases.Add(created);
+            await Db.SaveChangesAsync();
+            // 刚签下租约 → 顺手提示把这次的想法记入经验库（可跳过）
+            PromptKnowledge(created, KnowledgeCategory.Rental);
         }
         else
         {
@@ -342,6 +454,8 @@ else
         if (!entity.EndDate.HasValue || entity.EndDate.Value > today) entity.EndDate = today;
         await Db.SaveChangesAsync();
         await LoadLeasesAsync();
+        // 刚办理退租 → 顺手提示把这次的经验记入经验库（可跳过）
+        PromptKnowledge(l, KnowledgeCategory.Termination);
     }
 
     private async Task Delete(Lease l)
@@ -475,4 +589,121 @@ else
         initOk = $"已登记 {jobs.Count} 笔收款，合计 ¥{total:0.00}；{leftUnpaid} 张账单保持未付（欠款留账，可在报表「欠款一览」查看）。";
         await ReloadInitAsync();
     }
+
+    // ───────────────────── 经验库（签约 / 退租的想法与经验沉淀）─────────────────────
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private List<KnowledgeEntry> kbItems = new();
+    private bool kbLoaded;
+    private bool kbFormOpen;
+    private int? kbEditingId;
+    private string? kbSourceHint;
+    private string? kbErr;
+    private string kbKeyword = "";
+    private string kbCategoryFilter = "";
+    private HashSet<int> kbExpanded = new();
+    private KnowledgeForm kbForm = new();
+    private Dictionary<int, string> leaseLabelById = new();
+
+    private sealed class KnowledgeForm
+    {
+        public string Title { get; set; } = "";
+        public string? Content { get; set; }
+        public KnowledgeCategory Category { get; set; } = KnowledgeCategory.Rental;
+        public int? LeaseId { get; set; }
+    }
+
+    private async Task LoadKnowledgeAsync()
+    {
+        KnowledgeCategory? cat = null;
+        if (!string.IsNullOrEmpty(kbCategoryFilter) && Enum.TryParse<KnowledgeCategory>(kbCategoryFilter, out var c))
+            cat = c;
+        kbItems = await Knowledge.SearchAsync(kbKeyword, cat);
+        kbLoaded = true;
+    }
+
+    /// <summary>新建租约 / 退租后打开预填的经验录入表单（可跳过）。</summary>
+    private void PromptKnowledge(Lease l, KnowledgeCategory cat)
+    {
+        var room = rooms.FirstOrDefault(r => r.Id == l.RoomId);
+        var tenant = tenants.FirstOrDefault(t => t.Id == l.TenantId);
+        var verb = cat == KnowledgeCategory.Rental ? "出租" : "退租";
+        kbForm = new KnowledgeForm
+        {
+            Title = $"{verb} · {room?.Property?.Name} · {room?.Name} · {tenant?.Name}",
+            Category = cat,
+            LeaseId = l.Id,
+        };
+        kbSourceHint = cat == KnowledgeCategory.Rental
+            ? "租约已签订 ✓ 这次签约有什么想法、注意事项或经验？记下来下次少踩坑（也可跳过）。"
+            : "已办理退租 ✓ 这次退租有什么经验或教训？记下来供以后参考（也可跳过）。";
+        kbEditingId = null;
+        kbErr = null;
+        kbFormOpen = true;
+    }
+
+    private void OpenKnowledgeNew()
+    {
+        kbEditingId = null;
+        kbSourceHint = null;
+        kbForm = new KnowledgeForm();
+        kbFormOpen = true;
+        kbErr = null;
+    }
+
+    private void OpenKnowledgeEdit(KnowledgeEntry k)
+    {
+        kbEditingId = k.Id;
+        kbSourceHint = null;
+        kbForm = new KnowledgeForm { Title = k.Title, Content = k.Content, Category = k.Category, LeaseId = k.LeaseId };
+        kbFormOpen = true;
+        kbErr = null;
+    }
+
+    private void CloseKnowledgeForm()
+    {
+        kbFormOpen = false;
+        kbEditingId = null;
+        kbSourceHint = null;
+        kbForm = new KnowledgeForm();
+        kbErr = null;
+    }
+
+    private async Task SaveKnowledge()
+    {
+        kbErr = null;
+        try
+        {
+            if (kbEditingId is null)
+                await Knowledge.AddAsync(kbForm.Title, kbForm.Content, kbForm.Category, kbForm.LeaseId);
+            else
+                await Knowledge.UpdateAsync(kbEditingId.Value, kbForm.Title, kbForm.Content, kbForm.Category);
+            CloseKnowledgeForm();
+            await LoadKnowledgeAsync();
+        }
+        catch (DomainException ex)
+        {
+            kbErr = ex.Message;
+        }
+    }
+
+    private async Task DeleteKnowledge(KnowledgeEntry k)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"删除经验「{k.Title}」？此操作不可恢复。")) return;
+        await Knowledge.DeleteAsync(k.Id);
+        if (kbExpanded.Contains(k.Id)) kbExpanded.Remove(k.Id);
+        await LoadKnowledgeAsync();
+    }
+
+    private void ToggleKnowledge(int id)
+    {
+        if (!kbExpanded.Remove(id)) kbExpanded.Add(id);
+    }
+
+    private static string KbBadge(KnowledgeCategory c) => c switch
+    {
+        KnowledgeCategory.Rental => "st-paid",
+        KnowledgeCategory.Termination => "st-partial",
+        _ => "st-neutral",
+    };
 }
