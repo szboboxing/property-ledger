@@ -1,3 +1,4 @@
+using PropertyLedger.Core.Services;
 using SkiaSharp;
 
 namespace PropertyLedger.Web.Services;
@@ -141,7 +142,7 @@ public class BillImageRenderer
         y += head.LineHeight + 10;
 
         Text(c, body,
-            $"租客：{v.TenantName}" + (v.TenantPhone is null ? "" : $"　电话：{v.TenantPhone}"),
+            $"租客：{v.TenantName}" + (v.TenantPhone is null ? "" : $"　电话：{SettingsService.MaskPhone(v.TenantPhone)}"),
             left, y, SKTextAlign.Left);
         y += body.LineHeight + 6;
 
@@ -189,14 +190,20 @@ public class BillImageRenderer
             {
                 using (qr)
                 {
+                    // 等比例缩放：按原图宽高比适配 240×240 区域，居中摆放（不拉伸变形）
                     const int size = 240;
-                    var box = new SKRect(Width / 2f - size / 2f - 12, y,
-                                         Width / 2f + size / 2f + 12, y + size + 24);
+                    var scale = Math.Min(size / (float)qr.Width, size / (float)qr.Height);
+                    var drawW = qr.Width * scale;
+                    var drawH = qr.Height * scale;
+                    var cx = Width / 2f;
+                    var cy = y + 12 + size / 2f;
+                    var box = new SKRect(cx - size / 2f - 12, y,
+                                         cx + size / 2f + 12, y + size + 24);
                     fill.Color = SKColors.White;
                     c?.DrawRect(box, fill);
                     c?.DrawRect(box, border);
-                    c?.DrawBitmap(qr, new SKRect(Width / 2f - size / 2f, y + 12,
-                                                  Width / 2f + size / 2f, y + 12 + size),
+                    c?.DrawBitmap(qr, new SKRect(cx - drawW / 2f, cy - drawH / 2f,
+                                                  cx + drawW / 2f, cy + drawH / 2f),
                                   sampling, null);
                 }
                 y += 240 + 24 + 8;

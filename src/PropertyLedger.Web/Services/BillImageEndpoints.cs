@@ -47,7 +47,8 @@ public static class BillImageEndpoints
                 Total = bill.TotalAmount,
                 Paid = bill.PaidAmount,
                 Remaining = bill.RemainingAmount,
-                PaymentNotice = sets.GetValueOrDefault(SettingKeys.PaymentNotice) ?? "",
+                // 从未设置过提示语时使用默认话术；显式清空（空串）则账单不显示
+                PaymentNotice = sets.GetValueOrDefault(SettingKeys.PaymentNotice) ?? SettingsService.DefaultPaymentNotice,
                 PayQrCodeDataUri = sets.GetValueOrDefault(SettingKeys.PayQrCode),
             };
 

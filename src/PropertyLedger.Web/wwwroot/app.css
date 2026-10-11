@@ -201,3 +201,6 @@ table.data tbody td { padding: 10px 12px; vertical-align: middle; border-top: 1p
 .kb-item { border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 10px 12px; margin-bottom: 10px; }
 .kb-item:last-child { margin-bottom: 0; }
 .kb-source-hint { border: 1px solid rgba(22, 163, 74, .35); background: #f0fdf4; color: var(--ok); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: .9rem; }
+
+/* 设置页：收款提示语快选话术按钮 */
+.notice-preset { font-size: .8125rem; padding: .25rem .6rem; white-space: normal; text-align: left; }

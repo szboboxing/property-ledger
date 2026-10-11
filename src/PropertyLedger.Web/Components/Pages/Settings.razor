@@ -113,7 +113,14 @@
     <div class="mb-3">
         <label class="form-label">收款提示语</label>
         <input class="form-control" @bind="notice" placeholder="如：请在到期日前支付，转账后请告知，谢谢～" />
-        <div class="section-hint">显示在账单图片底部。</div>
+        <div class="section-hint">显示在账单图片底部。点击下方常用话术可快速替换：</div>
+        <div class="d-flex gap-2 flex-wrap mt-2">
+            @foreach (var preset in SettingsService.PaymentNoticePresets)
+            {
+                <button type="button" class="btn btn-sm btn-outline-secondary notice-preset"
+                        @onclick="() => notice = preset">@preset</button>
+            }
+        </div>
     </div>
     <button class="btn btn-brand" @onclick="SaveText">保存基础信息</button>
 </div>
@@ -138,7 +145,11 @@
             <button class="btn btn-outline-danger btn-sm" @onclick="RemoveQr">移除收款码</button>
         }
     </div>
-    <div class="section-hint mt-2">支持 PNG / JPG，建议正方形，大小不超过 5MB。</div>
+    <div class="section-hint mt-2">
+        <div>· 微信：服务-收付款-二维码收款-保存收款码（绿色的底哦）</div>
+        <div>· 支付宝：收付款-收钱-保存图片（蓝色的底哦）</div>
+        <div>· 支持 PNG / JPG，大小不超过 5MB</div>
+    </div>
 </div>
 
 @if (isAdmin)
@@ -196,7 +207,8 @@
             SettingKeys.LandlordName, SettingKeys.PaymentNotice, SettingKeys.PayQrCode,
         });
         landlord = s.GetValueOrDefault(SettingKeys.LandlordName) ?? "";
-        notice = s.GetValueOrDefault(SettingKeys.PaymentNotice) ?? "";
+        // 从未保存过收款提示语时预填默认话术；显式清空（空串）则尊重为空
+        notice = s.GetValueOrDefault(SettingKeys.PaymentNotice) ?? SettingsService.DefaultPaymentNotice;
         qrDataUri = s.GetValueOrDefault(SettingKeys.PayQrCode);
 
         canAuto = Upgrader.CanAutoUpgrade;
