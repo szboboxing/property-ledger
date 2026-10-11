@@ -54,3 +54,24 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release:
+    # 仅 tag 触发时建 GitHub Release（应用内「在线升级」读取 releases/latest，Release 必须存在）
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f RELEASE_NOTES.md ]; then
+            BODY_FILE=RELEASE_NOTES.md
+          else
+            printf 'Release %s\n\nSee commit history for details.\n' "${GITHUB_REF_NAME}" > /tmp/body.md
+            BODY_FILE=/tmp/body.md
+          fi
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file "$BODY_FILE"
