@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PropertyLedger.Core.Data;
 using PropertyLedger.Core.Models;
 using PropertyLedger.Core.Services;
+using PropertyLedger.Web;
 using PropertyLedger.Web.Components;
 using PropertyLedger.Web.Services;
 
