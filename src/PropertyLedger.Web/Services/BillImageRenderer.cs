@@ -5,7 +5,7 @@ namespace PropertyLedger.Web.Services;
 
 /// <summary>
 /// 用 SkiaSharp（MIT 许可、跨平台）绘制中文账单卡片 PNG。
-/// Linux 容器需安装中文字体（fonts-noto-cjk）与 libfontconfig1。
+/// Linux 容器内置 /app/fonts/NotoSansSC-Regular.otf 单字体（粗体由 Embolden 合成），并需 fontconfig。
 /// </summary>
 public class BillImageRenderer
 {
@@ -47,7 +47,8 @@ public class BillImageRenderer
         (@"C:\Windows\Fonts\msyh.ttc", 0),
         (@"C:\Windows\Fonts\simhei.ttf", 0),
         (@"C:\Windows\Fonts\simsun.ttc", 0),
-        // Linux（Noto CJK / 文泉驿 / DejaVu 兜底）
+        // Linux（容器内置单字体 / 旧部署的全量 Noto CJK / 文泉驿 / DejaVu 兜底）
+        ("/app/fonts/NotoSansSC-Regular.otf", 0),
         ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 2),
         ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
         ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", 2),
