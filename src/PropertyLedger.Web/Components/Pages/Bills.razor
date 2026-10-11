@@ -3,6 +3,7 @@
 @rendermode InteractiveServer
 @inject AppDbContext Db
 @inject BillingService Billing
+@inject IJSRuntime JS
 
 <PageTitle>账单与收款</PageTitle>
 
@@ -194,8 +195,37 @@
     <div class="card p-3 mt-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <strong>@selected.Room?.Name · @selected.Tenant?.Name · @selected.PeriodStart.ToString("yyyy-MM") 账单</strong>
-            <button class="btn-close" @onclick="() => selected = null" aria-label="关闭"></button>
+            <div class="d-flex gap-2 align-items-center">
+                @if (!editing)
+                {
+                    <button class="btn btn-sm btn-outline-primary" @onclick="StartEdit">编辑</button>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="DeleteBill">删除</button>
+                }
+                <button class="btn-close" @onclick="() => { selected = null; editing = false; }" aria-label="关闭"></button>
+            </div>
         </div>
+
+        @if (editing)
+        {
+            <div class="card p-3 mb-3">
+                <strong class="d-block mb-2">编辑账单</strong>
+                <div class="row g-2">
+                    <div class="col-6 col-md-4">
+                        <label class="form-label">租金金额（¥）</label>
+                        <input type="number" step="0.01" min="0" class="form-control" @bind="editRent" />
+                    </div>
+                    <div class="col-6 col-md-8">
+                        <label class="form-label">备注（选填）</label>
+                        <input class="form-control" @bind="editNote" placeholder="如 本月优惠 / 免租说明" />
+                    </div>
+                </div>
+                <div class="section-hint mt-2">杂费明细在下方继续增删；保存后自动重算应收合计与状态。若本月免租，可把租金改为 0。</div>
+                <div class="mt-2 d-flex gap-2">
+                    <button class="btn btn-brand btn-sm" @onclick="SaveEdit">保存</button>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="CancelEdit">取消</button>
+                </div>
+            </div>
+        }
 
         @if (selected.IsManual)
         {
@@ -474,8 +504,63 @@
             payAmount = selected.RemainingAmount;
             payDate = DateTime.Today;
             newItemName = null; newItemAmount = 0; newItemRemark = null;
+            editing = false; editNote = null;
         }
         Error = Ok = null;
+    }
+
+    // ── 账单编辑 / 删除 ──
+    private bool editing;
+    private decimal editRent;
+    private string? editNote;
+
+    private void StartEdit()
+    {
+        if (selected is null) return;
+        editing = true;
+        editRent = selected.RentAmount;
+        editNote = selected.Note;
+        Error = Ok = null;
+    }
+
+    private void CancelEdit()
+    {
+        editing = false;
+        editNote = null;
+        Error = Ok = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (selected is null) return;
+        var id = selected.Id;
+        await RunSafe(async () =>
+        {
+            await Billing.UpdateBillAsync(id, editRent, editNote);
+            return true;
+        });
+        if (Error is null) { editing = false; await Open(id); Ok = "账单已保存，应收合计已重算。"; }
+    }
+
+    private async Task DeleteBill()
+    {
+        if (selected is null) return;
+        var tip = selected.IsManual
+            ? $"删除补录账单（{selected.PeriodStart:yyyy-MM}）？杂费明细一并删除，此操作不可恢复。"
+            : $"删除该账单（{selected.PeriodStart:yyyy-MM}）？杂费明细一并删除，此操作不可恢复。注意：自动出账范围内的账单可能在「补生成 / 刷新账单」时按租约标准重新生成；如本月免租，建议用「编辑」把租金改为 0。";
+        if (!await JS.InvokeAsync<bool>("confirm", tip)) return;
+        var id = selected.Id;
+        await RunSafe(async () =>
+        {
+            await Billing.DeleteBillAsync(id);
+            return true;
+        });
+        if (Error is null)
+        {
+            selected = null;
+            await LoadAsync();
+            Ok = "账单已删除。";
+        }
     }
 
     private async Task AddPayment()

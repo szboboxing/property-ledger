@@ -302,6 +302,39 @@ public class BillingService
     }
 
     /// <summary>
+    /// 编辑账单：调整租金金额与备注（杂费在账单面板单独增删）。保存后自动重算应收总额与状态；
+    /// 若应收被改到低于已收，抛错提示先撤销多余收款。
+    /// </summary>
+    public async Task UpdateBillAsync(int billId, decimal rentAmount, string? note, CancellationToken ct = default)
+    {
+        if (rentAmount < 0m) throw new DomainException("租金金额不能为负数。");
+        var bill = await _db.Bills.Include(b => b.Items).Include(b => b.Payments)
+            .FirstOrDefaultAsync(b => b.Id == billId, ct)
+            ?? throw new DomainException("账单不存在。");
+        bill.RentAmount = rentAmount;
+        bill.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        Recalculate(bill);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// 删除账单（连同杂费明细）。已登记过收款的账单必须先撤销全部收款再删，
+    /// 避免收款记录悬空、破坏「已收 = Σ收款」的报表口径。注意：自动出账范围内的账单
+    /// 删除后可能在下次补账时按租约标准重新生成（如需当月免租，可编辑租金为 0）。
+    /// </summary>
+    public async Task DeleteBillAsync(int billId, CancellationToken ct = default)
+    {
+        var bill = await _db.Bills.Include(b => b.Items).Include(b => b.Payments)
+            .FirstOrDefaultAsync(b => b.Id == billId, ct)
+            ?? throw new DomainException("账单不存在。");
+        if (bill.Payments.Count > 0)
+            throw new DomainException("该账单已有收款记录，请先撤销全部收款后再删除。");
+        _db.BillItems.RemoveRange(bill.Items);
+        _db.Bills.Remove(bill);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
     /// 统一重算：总额 = 租金 + 杂费；已收 = 收款合计；状态随之迁移。
     /// 若杂费下调导致已收超过总额，抛错提示先撤销多余收款。
     /// </summary>

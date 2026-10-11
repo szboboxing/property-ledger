@@ -3,6 +3,7 @@
 @attribute [Authorize(Roles = "Admin")]
 @inject AuthService Auth
 @inject AuthenticationStateProvider AuthState
+@inject IJSRuntime JS
 
 <PageTitle>用户管理 · 物业管理台账</PageTitle>
 
@@ -100,6 +101,8 @@
                         @if (!u.IsAdmin)
                         {
                             <button class="btn btn-sm btn-outline-secondary" @onclick="() => TogglePerms(u.Id)">功能权限</button>
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => ToggleEditUser(u.Id)">编辑</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteUser(u.Id)">删除</button>
                         }
                         <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleReset(u.Id)">重置密码</button>
                         @if (u.IsActive)
@@ -147,6 +150,21 @@
                         </td>
                     </tr>
                 }
+                @if (editUserId == u.Id)
+                {
+                    <tr>
+                        <td colspan="7" class="no-label">
+                            <div class="d-flex gap-2 align-items-center flex-wrap py-2">
+                                <span>编辑 @u.UserName：</span>
+                                <input class="form-control form-control-sm" style="max-width:180px" @bind="editUserName" placeholder="登录名" />
+                                <input class="form-control form-control-sm" style="max-width:180px" @bind="editDisplayName" placeholder="显示名" />
+                                <button class="btn btn-brand btn-sm" @onclick="() => SaveUser(u.Id)">保存</button>
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="CancelEditUser">取消</button>
+                                <span class="section-hint">修改登录名后需用新登录名重新登录</span>
+                            </div>
+                        </td>
+                    </tr>
+                }
             }
         </tbody>
     </table>
@@ -165,6 +183,9 @@
 
     private int? resetId;
     private string resetPassword = "";
+
+    private int? editUserId;
+    private string editUserName = "", editDisplayName = "";
     private string? Error, Ok;
 
     protected override async Task OnInitializedAsync()
@@ -206,6 +227,7 @@
         permsId = permsId == id ? null : id;
         editFeatures = new HashSet<string>(UserFeatures.Parse(u.Features));
         resetId = null;
+        editUserId = null;
         Error = Ok = null;
     }
 
@@ -242,6 +264,7 @@
         resetId = resetId == id ? null : id;
         resetPassword = "";
         permsId = null;
+        editUserId = null;
         Error = Ok = null;
     }
 
@@ -257,6 +280,47 @@
         Error = Ok = null;
         await RunSafe(() => Auth.ChangePasswordAsync(id, resetPassword));
         if (Error is null) { resetId = null; resetPassword = ""; Ok = "密码已重置。"; }
+    }
+
+    // ── 编辑用户（登录名 / 显示名） ──
+    private void ToggleEditUser(int id)
+    {
+        var u = users.FirstOrDefault(x => x.Id == id);
+        if (u is null) return;
+        if (editUserId == id) { CancelEditUser(); return; }
+        editUserId = id;
+        editUserName = u.UserName;
+        editDisplayName = u.DisplayName;
+        permsId = null;
+        resetId = null;
+        Error = Ok = null;
+    }
+
+    private void CancelEditUser()
+    {
+        editUserId = null;
+        editUserName = editDisplayName = "";
+        Error = Ok = null;
+    }
+
+    private async Task SaveUser(int id)
+    {
+        Error = Ok = null;
+        await RunSafe(() => Auth.RenameUserAsync(id, editUserName, editDisplayName));
+        if (Error is null) { editUserId = null; Ok = "用户信息已保存（改名后需用新登录名重新登录）。"; await LoadAsync(); }
+    }
+
+    // ── 删除用户 ──
+    private async Task DeleteUser(int id)
+    {
+        var u = users.FirstOrDefault(x => x.Id == id);
+        if (u is null) return;
+        Error = Ok = null;
+        var confirmed = await JS.InvokeAsync<bool>("confirm",
+            $"删除用户「{u.UserName}（{u.DisplayName}）」？该账号将无法登录，此操作不可恢复。");
+        if (!confirmed) return;
+        await RunSafe(() => Auth.DeleteUserAsync(id));
+        if (Error is null) { Ok = "用户已删除。"; await LoadAsync(); }
     }
 
     private async Task RunSafe(Func<Task> action)

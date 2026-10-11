@@ -79,4 +79,29 @@ public class AuthService
         user.IsActive = active;
         await _db.SaveChangesAsync(ct);
     }
+
+    /// <summary>修改普通用户的登录名与显示名（管理员账号不可修改，防止误动主账号）。</summary>
+    public async Task RenameUserAsync(int userId, string userName, string? displayName, CancellationToken ct = default)
+    {
+        userName = userName.Trim();
+        if (string.IsNullOrWhiteSpace(userName)) throw new DomainException("登录名不能为空。");
+        var user = await _db.Users.FindAsync(new object[] { userId }, ct)
+                   ?? throw new DomainException("用户不存在。");
+        if (user.IsAdmin) throw new DomainException("管理员账号不支持修改登录名。");
+        if (await _db.Users.AnyAsync(u => u.UserName == userName && u.Id != userId, ct))
+            throw new DomainException("登录名已存在。");
+        user.UserName = userName;
+        user.DisplayName = string.IsNullOrWhiteSpace(displayName) ? userName : displayName.Trim();
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>删除普通用户账号（管理员账号不可删除；账号不与业务数据关联，删除不影响账目）。</summary>
+    public async Task DeleteUserAsync(int userId, CancellationToken ct = default)
+    {
+        var user = await _db.Users.FindAsync(new object[] { userId }, ct)
+                   ?? throw new DomainException("用户不存在。");
+        if (user.IsAdmin) throw new DomainException("管理员账号不可删除。");
+        _db.Users.Remove(user);
+        await _db.SaveChangesAsync(ct);
+    }
 }
