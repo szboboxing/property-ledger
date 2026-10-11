@@ -62,14 +62,6 @@ public class SettingsService
         await _db.SaveChangesAsync(ct);
     }
 
-    /// <summary>
-    /// 电话脱敏：保留首尾各 4 位，中间用 *** 隐藏（如 13812345678 → 1381***5678）。
-    /// 长度不足 9 位（如 8 位座机）无法安全遮盖，原样返回。
-    /// </summary>
-    public static string MaskPhone(string? phone)
-    {
-        if (string.IsNullOrWhiteSpace(phone) || phone.Trim().Length < 9) return phone ?? "";
-        var p = phone.Trim();
-        return string.Concat(p.AsSpan(0, 4), "***", p.AsSpan(^4));
-    }
+    /// <summary>电话脱敏（转发 PrivacyMask.MaskPhone，兼容既有调用）。</summary>
+    public static string MaskPhone(string? phone) => PrivacyMask.MaskPhone(phone);
 }

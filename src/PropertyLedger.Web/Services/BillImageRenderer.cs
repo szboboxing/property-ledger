@@ -133,7 +133,7 @@ public class BillImageRenderer
         c?.DrawRect(0, 0, Width, 12, fill);
 
         // 标题
-        Text(c, title, "房租收款账单", Width / 2f, y, SKTextAlign.Center);
+        Text(c, title, "房 租 账 单", Width / 2f, y, SKTextAlign.Center);
         y += title.LineHeight + 14;
 
         // 物业 · 房间 ／ 状态
@@ -142,7 +142,7 @@ public class BillImageRenderer
         y += head.LineHeight + 10;
 
         Text(c, body,
-            $"租客：{v.TenantName}" + (v.TenantPhone is null ? "" : $"　电话：{SettingsService.MaskPhone(v.TenantPhone)}"),
+            $"租客：{PrivacyMask.MaskName(v.TenantName)}" + (v.TenantPhone is null ? "" : $"　电话：{PrivacyMask.MaskPhone(v.TenantPhone)}"),
             left, y, SKTextAlign.Left);
         y += body.LineHeight + 6;
 

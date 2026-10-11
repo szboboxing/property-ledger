@@ -12,12 +12,27 @@ public class SettingsMaskTests
     [InlineData("12345678", "12345678")]         // 8 位座机：长度不足 9 位原样保留
     [InlineData("12345", "12345")]               // 过短原样保留
     [InlineData("", "")]
-    public void MaskPhone_KeepsFirstAndLast4(string input, string expected)
+    [InlineData(null, "")]
+    public void MaskPhone_KeepsFirstAndLast4(string? input, string expected)
         => Assert.Equal(expected, SettingsService.MaskPhone(input));
 
+    [Theory]
+    [InlineData("张三", "张*")]
+    [InlineData("王小明", "王**")]
+    [InlineData("欧阳娜娜", "欧***")]
+    [InlineData("  李四  ", "李*")]        // 首尾空白先裁剪再脱敏
+    [InlineData("王", "王")]               // 单字姓名原样保留
+    [InlineData("", "")]
+    public void MaskName_KeepsFirstCharOnly(string input, string expected)
+        => Assert.Equal(expected, PrivacyMask.MaskName(input));
+
     [Fact]
-    public void MaskPhone_Null_ReturnsEmpty()
-        => Assert.Equal("", SettingsService.MaskPhone(null));
+    public void MaskName_Null_ReturnsEmpty()
+        => Assert.Equal("", PrivacyMask.MaskName(null));
+
+    [Fact]
+    public void MaskPhone_ForwardsToPrivacyMask()
+        => Assert.Equal("1381***5678", SettingsService.MaskPhone("13812345678"));
 
     [Fact]
     public void DefaultPaymentNotice_NotEmpty()
