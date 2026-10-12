@@ -13,12 +13,35 @@ public class BillingService
     private readonly AppDbContext _db;
     public BillingService(AppDbContext db) => _db = db;
 
+    /// <summary>
+    /// 某自然月的月租（含逐年递增；未配置递增时 = 租金原值）。
+    /// 递增按「起租后第几个租约年」套用：第 1 年为原值，第 2 年起按比例复利或按金额累加。
+    /// </summary>
+    public static decimal EscalatedMonthlyRent(Lease lease, int year, int month)
+    {
+        var baseRent = lease.RentAmount;
+        if (lease.EscMode == 0 || lease.EscValue <= 0m)
+            return decimal.Round(baseRent, 2, MidpointRounding.AwayFromZero);
+
+        var diff = PeriodCalendar.MonthIndex(PeriodCalendar.FirstDayOfMonth(year, month))
+                   - PeriodCalendar.MonthIndex(lease.StartDate);
+        if (diff < 0) diff = 0;
+        var yearIndex = diff / 12;   // 0 = 租约第 1 年
+        if (yearIndex <= 0)
+            return decimal.Round(baseRent, 2, MidpointRounding.AwayFromZero);
+
+        var escalated = lease.EscMode == 1
+            ? baseRent * (decimal)Math.Pow(1.0 + (double)lease.EscValue / 100.0, yearIndex)
+            : baseRent + lease.EscValue * yearIndex;
+        return decimal.Round(escalated, 2, MidpointRounding.AwayFromZero);
+    }
+
     // ───────────────────────── 出账周期计算（纯函数，便于单测）─────────────────────────
 
     /// <summary>
     /// 判断租约在指定自然月是否应出账，并计算账期。
     /// 月付：账期为该自然月；季付：仅在与起租月相隔 3 的整数倍的月份出账，账期连续 3 个月。
-    /// 账期与租期必须有交集。
+    /// 账期与租期必须有交集。月租按租约年套用租金递增。
     /// </summary>
     public static bool TryGetPeriod(Lease lease, int year, int month, out PeriodPlan plan)
     {
@@ -36,7 +59,7 @@ public class BillingService
                 monthStart,
                 monthEnd,
                 PeriodCalendar.DueDate(year, month, lease.PaymentDay),
-                lease.RentAmount);
+                EscalatedMonthlyRent(lease, year, month));
             return true;
         }
 
@@ -44,18 +67,25 @@ public class BillingService
         var delta = PeriodCalendar.MonthIndex(monthStart) - PeriodCalendar.MonthIndex(lease.StartDate);
         if (delta < 0 || delta % 3 != 0) return false;
 
-        // 季账期：当月起连续 3 个自然月
+        // 季账期：当月起连续 3 个自然月；金额 = 三个月递增后月租之和
         var periodEndDate = monthStart.AddMonths(2);
         var periodEnd = PeriodCalendar.LastDayOfMonth(periodEndDate);
 
         if (periodEnd < lease.StartDate) return false;
         if (lease.EndDate.HasValue && monthStart > lease.EndDate.Value) return false;
 
+        var quarterlyRent = 0m;
+        for (var k = 0; k < 3; k++)
+        {
+            var m = monthStart.AddMonths(k);
+            quarterlyRent += EscalatedMonthlyRent(lease, m.Year, m.Month);
+        }
+
         plan = new PeriodPlan(
             monthStart,
             periodEnd,
             PeriodCalendar.DueDate(year, month, lease.PaymentDay),
-            lease.RentAmount * 3m);
+            quarterlyRent);
         return true;
     }
 
@@ -256,10 +286,12 @@ public class BillingService
     /// <summary>
     /// 批量结清：为指定账单逐张登记一笔金额 = 剩余应收的全额收款（备注「批量结清」），
     /// 与单笔收款走同一套重算逻辑，报表已收金额同步增加；已结清/不存在的账单自动跳过。
-    /// 返回（结清张数，登记收款总额）。
+    /// 收款日期模式：<paramref name="useBillDueDate"/> 为 true 时按各账单各自的到期日登记（「账单当月」），
+    /// 否则全部使用同一日期。返回（结清张数，登记收款总额）。
     /// </summary>
     public async Task<(int Settled, decimal Total)> BatchSettleAsync(
-        IEnumerable<int> billIds, PaymentMethod method, DateTime paidAt, CancellationToken ct = default)
+        IEnumerable<int> billIds, PaymentMethod method, DateTime paidAt,
+        bool useBillDueDate = false, CancellationToken ct = default)
     {
         var settled = 0;
         decimal total = 0m;
@@ -274,7 +306,7 @@ public class BillingService
             {
                 BillId = bill.Id,
                 Amount = bill.RemainingAmount,
-                PaidAt = paidAt,
+                PaidAt = useBillDueDate ? bill.DueDate : paidAt,
                 Method = method,
                 Note = "批量结清",
             };

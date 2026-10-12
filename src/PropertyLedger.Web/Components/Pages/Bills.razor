@@ -57,8 +57,15 @@
                 <span class="ms-2">将当前筛选下 <b>@unsettled.Count</b> 张未结清账单一次性登记全额收款，合计 <b>¥@unsettledTotal.ToString("0.00")</b></span>
             </div>
             <div class="col-6 col-md-3">
+                <label class="form-label">收款日期模式</label>
+                <select class="form-select" @bind="batchDateMode">
+                    <option value="0">统一日期（全部同一天）</option>
+                    <option value="1">账单当月（按各账单到期日）</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
                 <label class="form-label">收款日期</label>
-                <input type="date" class="form-control" @bind="batchDate" />
+                <input type="date" class="form-control" @bind="batchDate" disabled="@(batchDateMode == 1)" />
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label">收款方式</label>
@@ -78,7 +85,9 @@
             </div>
             <div class="col-12">
                 <div class="section-hint">
-                    为每张账单登记一笔金额 = 剩余应收的收款记录（备注「批量结清」），已结清的自动跳过；报表已收金额同步增加，操作后可在记账面板逐笔撤销。
+                    @(batchDateMode == 1
+                        ? "将按每张账单各自的到期日（即账单当月）登记收款日期。"
+                        : "为每张账单登记一笔金额 = 剩余应收的收款记录（备注「批量结清」），全部使用同一收款日期；已结清的自动跳过，报表已收金额同步增加，操作后可在记账面板逐笔撤销。")
                 </div>
             </div>
         </div>
@@ -382,6 +391,8 @@
 
     // 批量结清
     private bool showBatch;
+    /// <summary>收款日期模式：0=统一日期 1=账单当月（按各账单到期日）</summary>
+    private int batchDateMode;
     private DateTime batchDate = DateTime.Today;
     private PaymentMethod batchMethod = PaymentMethod.WeChat;
 
@@ -473,7 +484,8 @@
         var ids = unsettled.Select(b => b.Id).ToList();
         await RunSafe(async () =>
         {
-            var (settled, total) = await Billing.BatchSettleAsync(ids, batchMethod, batchDate);
+            var (settled, total) = await Billing.BatchSettleAsync(
+                ids, batchMethod, batchDate, useBillDueDate: batchDateMode == 1);
             Ok = $"已批量结清 {settled} 张账单，合计 ¥{total:0.00}，报表已收金额同步增加。";
             return true;
         });

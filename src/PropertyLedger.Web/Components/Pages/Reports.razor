@@ -58,56 +58,7 @@ else
         </div>
     </div>
 
-    <h5 class="mt-2 mb-2">按账期月份</h5>
-    @if (MonthYearBlocks.Count == 0)
-    {
-        <div class="card p-3 mb-3 empty no-label">当前筛选下没有账单。</div>
-    }
-    @foreach (var block in MonthYearBlocks)
-    {
-        <div class="card mb-3 year-block">
-            <div class="year-block-header d-flex flex-wrap align-items-baseline gap-3">
-                <span class="year-block-title">@block.Year 年</span>
-                <span class="year-block-meta">
-                    @block.Count 张账单 ·
-                    应收 <b>¥@block.Total.ToString("0.00")</b> ·
-                    已收 <b class="text-success">¥@block.Paid.ToString("0.00")</b> ·
-                    未收 <b class="text-danger">¥@block.Due.ToString("0.00")</b> ·
-                    收款率 @RateOf(block.Total, block.Paid)
-                </span>
-            </div>
-            <div class="table-wrap">
-                <table class="data">
-                    <thead>
-                        <tr><th>月份</th><th class="num">账单数</th><th class="num">应收</th><th class="num">已收</th><th class="num">未收</th><th class="num">收款率</th></tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var m in block.Months)
-                        {
-                            <tr>
-                                <td data-label="月份" class="fw-semibold">@m.Month.ToString("00") 月</td>
-                                <td data-label="账单数" class="num">@(m.Count > 0 ? m.Count.ToString() : "—")</td>
-                                <td data-label="应收" class="num">¥@m.Total.ToString("0.00")</td>
-                                <td data-label="已收" class="num">¥@m.Paid.ToString("0.00")</td>
-                                <td data-label="未收" class="num @(m.Total - m.Paid > 0 ? "text-danger" : "")">¥@((m.Total - m.Paid).ToString("0.00"))</td>
-                                <td data-label="收款率" class="num">@RateOf(m.Total, m.Paid)</td>
-                            </tr>
-                        }
-                        <tr>
-                            <td data-label="月份" class="fw-bold">@block.Year 年合计</td>
-                            <td data-label="账单数" class="num fw-bold">@block.Count</td>
-                            <td data-label="应收" class="num fw-bold">¥@block.Total.ToString("0.00")</td>
-                            <td data-label="已收" class="num fw-bold">¥@block.Paid.ToString("0.00")</td>
-                            <td data-label="未收" class="num fw-bold text-danger">¥@block.Due.ToString("0.00")</td>
-                            <td data-label="收款率" class="num fw-bold">@RateOf(block.Total, block.Paid)</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    }
-
-    <h5 class="mt-2 mb-2">按物业</h5>
+    <h5 class="mt-2 mb-2">按物业汇总</h5>
     <div class="table-wrap">
         <table class="data">
             <thead>
@@ -138,6 +89,54 @@ else
                         <td data-label="已收" class="num fw-bold">¥@sumPaid.ToString("0.00")</td>
                         <td data-label="未收" class="num fw-bold text-danger">¥@sumDue.ToString("0.00")</td>
                         <td data-label="收款率" class="num fw-bold">@Rate</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <h5 class="mt-3 mb-2 d-flex flex-wrap align-items-center gap-2">
+        <span>按月份汇总</span>
+        <span class="section-hint">每页 12 个月 · 由近到远</span>
+        @if (monthRows.Count > MonthPageSize)
+        {
+            <div class="btn-group btn-group-sm ms-auto" role="group">
+                <button class="btn btn-outline-secondary" @onclick="() => monthPage--" disabled="@(monthPage <= 1)">上页</button>
+                <button class="btn btn-outline-secondary" disabled>第 @monthPage / @MonthPages 页</button>
+                <button class="btn btn-outline-secondary" @onclick="() => monthPage++" disabled="@(monthPage >= MonthPages)">下页</button>
+            </div>
+        }
+    </h5>
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr><th>月份</th><th class="num">账单数</th><th class="num">应收</th><th class="num">已收</th><th class="num">未收</th><th class="num">收款率</th></tr>
+            </thead>
+            <tbody>
+                @if (monthRows.Count == 0)
+                {
+                    <tr><td colspan="6" class="empty no-label">当前筛选下没有账单。</td></tr>
+                }
+                @foreach (var m in MonthPageItems)
+                {
+                    <tr>
+                        <td data-label="月份" class="fw-semibold">@m.Year-@m.Month.ToString("00")</td>
+                        <td data-label="账单数" class="num">@m.Count</td>
+                        <td data-label="应收" class="num">¥@m.Total.ToString("0.00")</td>
+                        <td data-label="已收" class="num">¥@m.Paid.ToString("0.00")</td>
+                        <td data-label="未收" class="num @(m.Total - m.Paid > 0 ? "text-danger" : "")">¥@((m.Total - m.Paid).ToString("0.00"))</td>
+                        <td data-label="收款率" class="num">@RateOf(m.Total, m.Paid)</td>
+                    </tr>
+                }
+                @if (monthRows.Count > 0)
+                {
+                    <tr>
+                        <td data-label="月份" class="fw-bold">合计（全部 @monthRows.Count 个月）</td>
+                        <td data-label="账单数" class="num fw-bold">@monthCount</td>
+                        <td data-label="应收" class="num fw-bold">¥@monthTotal.ToString("0.00")</td>
+                        <td data-label="已收" class="num fw-bold">¥@monthPaid.ToString("0.00")</td>
+                        <td data-label="未收" class="num fw-bold text-danger">¥@((monthTotal - monthPaid).ToString("0.00"))</td>
+                        <td data-label="收款率" class="num fw-bold">@RateOf(monthTotal, monthPaid)</td>
                     </tr>
                 }
             </tbody>
@@ -258,31 +257,32 @@ else
 
     private sealed record MonthRow(int Year, int Month, int Count, decimal Total, decimal Paid);
 
-    // ── 按年份划块：每个年份一个独立块，含 12 个自然月 + 该年合计 ──
-    private sealed record YearBlock(int Year, List<MonthRow> Months, int Count, decimal Total, decimal Paid)
+    // ── 按月份汇总：有账单的月份由近到远平铺，每页 12 个月，合计行始终为全量 ──
+    private const int MonthPageSize = 12;
+    private int monthPage { get; set; } = 1;
+
+    private List<MonthRow> monthRows => scoped
+        .GroupBy(b => (b.PeriodStart.Year, b.PeriodStart.Month))
+        .Select(g => new MonthRow(g.Key.Year, g.Key.Month, g.Count(), g.Sum(b => b.TotalAmount), g.Sum(b => b.PaidAmount)))
+        .OrderByDescending(r => r.Year).ThenByDescending(r => r.Month)
+        .ToList();
+
+    private int MonthPages => Math.Max(1, (int)Math.Ceiling(monthRows.Count / (double)MonthPageSize));
+
+    private List<MonthRow> MonthPageItems
     {
-        public decimal Due => Total - Paid;
+        get
+        {
+            var pages = MonthPages;
+            if (monthPage > pages) monthPage = pages;
+            if (monthPage < 1) monthPage = 1;
+            return monthRows.Skip((monthPage - 1) * MonthPageSize).Take(MonthPageSize).ToList();
+        }
     }
 
-    private Dictionary<(int Year, int Month), MonthRow> monthLookup => all
-        .GroupBy(b => (b.PeriodStart.Year, b.PeriodStart.Month))
-        .ToDictionary(
-            g => g.Key,
-            g => new MonthRow(g.Key.Year, g.Key.Month, g.Count(), g.Sum(b => b.TotalAmount), g.Sum(b => b.PaidAmount)));
-
-    /// <summary>年份块列表：跟随顶部年份筛选，全部年份时所有年份倒序展示。</summary>
-    private List<YearBlock> MonthYearBlocks => scoped
-        .Select(b => b.PeriodStart.Year)
-        .Distinct()
-        .OrderByDescending(y => y)
-        .Select(y =>
-        {
-            var months = Enumerable.Range(1, 12)
-                .Select(m => monthLookup.GetValueOrDefault((y, m)) ?? new MonthRow(y, m, 0, 0m, 0m))
-                .ToList();
-            return new YearBlock(y, months, months.Sum(r => r.Count), months.Sum(r => r.Total), months.Sum(r => r.Paid));
-        })
-        .ToList();
+    private int monthCount => monthRows.Sum(r => r.Count);
+    private decimal monthTotal => monthRows.Sum(r => r.Total);
+    private decimal monthPaid => monthRows.Sum(r => r.Paid);
 
     private sealed record PropRow(string Name, int Count, decimal Total, decimal Paid);
 

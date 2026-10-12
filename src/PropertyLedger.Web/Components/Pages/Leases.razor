@@ -40,21 +40,40 @@ else
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label">起租日 *</label>
-                <input type="date" class="form-control" @bind="form.StartDate" />
+                <input type="date" class="form-control" @bind="form.StartDate" @bind:after="OnStartDateChanged" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label">租期年数</label>
+                <select class="form-select" @bind="form.TermMode" @bind:after="OnTermModeChanged">
+                    <option value="lt">长期（无固定期限）</option>
+                    @for (var i = 1; i <= 20; i++)
+                    {
+                        <option value="@i">@i 年</option>
+                    }
+                    <option value="custom">自定义日期</option>
+                </select>
+                <div class="section-hint">按年选择，自动算出到期日</div>
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label">到期日</label>
-                <input type="date" class="form-control" @bind="form.EndDate" disabled="@form.LongTerm" />
-            </div>
-            <div class="col-12">
-                <div class="form-check">
-                    <input type="checkbox" class="form-check-input" id="longterm" @bind="form.LongTerm" />
-                    <label class="form-check-label" for="longterm">长期 / 不定期（不设到期日）</label>
-                </div>
+                <input type="date" class="form-control" @bind="form.EndDate" disabled="@(form.TermMode != "custom")" />
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label">月租金 *</label>
                 <input type="number" step="0.01" class="form-control" @bind="form.RentAmount" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label">租金递增</label>
+                <select class="form-select" @bind="form.EscMode">
+                    <option value="0">不递增</option>
+                    <option value="1">按比例（每年 +x%）</option>
+                    <option value="2">按金额（每年 +x 元）</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label">@(form.EscMode == 1 ? "每年递增比例（%）" : form.EscMode == 2 ? "每年递增金额（元/月）" : "每年递增")</label>
+                <input type="number" step="0.01" min="0" class="form-control" @bind="form.EscValue" disabled="@(form.EscMode == 0)" />
+                <div class="section-hint">@EscHint</div>
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label">房屋押金</label>
@@ -283,7 +302,17 @@ else
                             <div>@l.StartDate.ToString("yyyy-MM-dd") 起</div>
                             <div class="section-hint">@(l.EndDate.HasValue ? "至 " + l.EndDate.Value.ToString("yyyy-MM-dd") : "长期")</div>
                         </td>
-                        <td data-label="月租" class="num">¥@l.RentAmount.ToString("0.00")</td>
+                        <td data-label="月租" class="num">
+                            <div>¥@l.RentAmount.ToString("0.00")</div>
+                            @if (l.EscMode == 1)
+                            {
+                                <div class="section-hint">每年 +@l.EscValue.ToString("0.##")%（复利）</div>
+                            }
+                            else if (l.EscMode == 2)
+                            {
+                                <div class="section-hint">每年 +@l.EscValue.ToString("0.##") 元/月</div>
+                            }
+                        </td>
                         <td data-label="押金（房屋/水电）" class="num">
                             <div>¥@l.HouseDeposit.ToString("0.00")</div>
                             <div class="section-hint">水电 ¥@l.UtilityDeposit.ToString("0.00")</div>
@@ -338,14 +367,45 @@ else
         public int RoomId { get; set; }
         public int TenantId { get; set; }
         public DateTime StartDate { get; set; } = DateTime.Today;
+        /// <summary>租期模式：lt=长期 / 1-20=按年（自动算到期日） / custom=自定义日期</summary>
+        public string TermMode { get; set; } = "lt";
         public DateTime? EndDate { get; set; }
-        public bool LongTerm { get; set; } = true;
         public decimal RentAmount { get; set; }
+        /// <summary>租金递增方式：0=不递增 1=按比例 2=按金额</summary>
+        public int EscMode { get; set; }
+        public decimal EscValue { get; set; }
         public decimal HouseDeposit { get; set; }
         public decimal UtilityDeposit { get; set; }
         public int PaymentDay { get; set; } = 1;
         public PaymentCycle Cycle { get; set; } = PaymentCycle.Monthly;
         public string? Note { get; set; }
+    }
+
+    private string EscHint => form.EscMode switch
+    {
+        1 => "如填 3：第二年起每月租金 = 上年 × 1.03，逐年复利",
+        2 => "如填 100：第二年起每月租金 = 上年 + 100 元",
+        _ => "选择递增方式后填写",
+    };
+
+    /// <summary>到期日恰为「起租 + N 年 − 1 天」时返回 N（1-20），否则 null。</summary>
+    private static int? MatchTermYears(DateTime start, DateTime end)
+    {
+        for (var i = 1; i <= 20; i++)
+            if (start.Date.AddYears(i).AddDays(-1) == end.Date) return i;
+        return null;
+    }
+
+    private void OnTermModeChanged()
+    {
+        if (int.TryParse(form.TermMode, out var years))
+            form.EndDate = form.StartDate.Date.AddYears(years).AddDays(-1);
+    }
+
+    private void OnStartDateChanged()
+    {
+        // 按年模式下起租日变动时同步重算到期日
+        OnTermModeChanged();
     }
 
     protected override async Task OnInitializedAsync()
@@ -381,8 +441,12 @@ else
         form = new FormModel
         {
             RoomId = l.RoomId, TenantId = l.TenantId,
-            StartDate = l.StartDate, EndDate = l.EndDate, LongTerm = !l.EndDate.HasValue,
-            RentAmount = l.RentAmount, HouseDeposit = l.HouseDeposit, UtilityDeposit = l.UtilityDeposit, PaymentDay = l.PaymentDay,
+            StartDate = l.StartDate,
+            TermMode = !l.EndDate.HasValue ? "lt"
+                : MatchTermYears(l.StartDate, l.EndDate.Value)?.ToString() ?? "custom",
+            EndDate = l.EndDate,
+            RentAmount = l.RentAmount, EscMode = l.EscMode, EscValue = l.EscValue,
+            HouseDeposit = l.HouseDeposit, UtilityDeposit = l.UtilityDeposit, PaymentDay = l.PaymentDay,
             Cycle = l.PaymentCycle, Note = l.Note,
         };
         Error = null;
@@ -405,9 +469,19 @@ else
     {
         if (form.RoomId <= 0 || form.TenantId <= 0) { Error = "请选择房间和租客。"; return; }
         if (form.RentAmount < 0) { Error = "租金不能为负。"; return; }
+        if (form.EscMode != 0 && form.EscValue <= 0)
+        {
+            Error = "请填写有效的每年递增" + (form.EscMode == 1 ? "比例" : "金额") + "。";
+            return;
+        }
         form.PaymentDay = Math.Clamp(form.PaymentDay, 1, 31);
-        var end = form.LongTerm ? null : form.EndDate;
-        if (end.HasValue && end.Value < form.StartDate) { Error = "到期日不能早于起租日。"; return; }
+        var end = form.TermMode switch
+        {
+            "lt" => (DateTime?)null,
+            "custom" => form.EndDate,
+            _ => form.StartDate.Date.AddYears(int.Parse(form.TermMode)).AddDays(-1),
+        };
+        if (end.HasValue && end.Value < form.StartDate.Date) { Error = "到期日不能早于起租日。"; return; }
 
         if (editingId is null)
         {
@@ -420,7 +494,8 @@ else
             {
                 RoomId = form.RoomId, TenantId = form.TenantId,
                 StartDate = form.StartDate, EndDate = end,
-                RentAmount = form.RentAmount, HouseDeposit = form.HouseDeposit, UtilityDeposit = form.UtilityDeposit,
+                RentAmount = form.RentAmount, EscMode = form.EscMode, EscValue = form.EscValue,
+                HouseDeposit = form.HouseDeposit, UtilityDeposit = form.UtilityDeposit,
                 PaymentDay = form.PaymentDay, PaymentCycle = form.Cycle, Note = form.Note,
                 Status = LeaseStatus.Active,
             };
@@ -436,7 +511,8 @@ else
             {
                 l.RoomId = form.RoomId; l.TenantId = form.TenantId;
                 l.StartDate = form.StartDate; l.EndDate = end;
-                l.RentAmount = form.RentAmount; l.HouseDeposit = form.HouseDeposit; l.UtilityDeposit = form.UtilityDeposit;
+                l.RentAmount = form.RentAmount; l.EscMode = form.EscMode; l.EscValue = form.EscValue;
+                l.HouseDeposit = form.HouseDeposit; l.UtilityDeposit = form.UtilityDeposit;
                 l.PaymentDay = form.PaymentDay; l.PaymentCycle = form.Cycle; l.Note = form.Note;
             }
         }

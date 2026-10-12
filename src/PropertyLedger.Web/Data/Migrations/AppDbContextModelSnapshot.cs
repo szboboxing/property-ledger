@@ -221,6 +221,13 @@ namespace PropertyLedger.Web.Data.Migrations
                     b.Property<DateTime?>("EndDate")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<int>("EscMode")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("EscValue")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
                     b.Property<decimal>("HouseDeposit")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");

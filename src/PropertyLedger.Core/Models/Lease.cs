@@ -15,8 +15,14 @@ public class Lease
     /// <summary>到期日期；为 null 表示长期 / 不定期</summary>
     public DateTime? EndDate { get; set; }
 
-    /// <summary>每月租金（月付时单月金额；季付时为单月金额，出账乘 3）</summary>
+    /// <summary>每月租金（月付时单月金额；季付出账 = 各月递增后月租之和）</summary>
     public decimal RentAmount { get; set; }
+
+    /// <summary>租金递增方式：0=不递增 1=按比例（每年 +x% 复利） 2=按金额（每年 +x 元/月）</summary>
+    public int EscMode { get; set; }
+
+    /// <summary>租金递增值：EscMode=1 时为百分比数（如 3 表示每年 +3%）；EscMode=2 时为每月递增金额</summary>
+    public decimal EscValue { get; set; }
 
     /// <summary>房屋押金</summary>
     public decimal HouseDeposit { get; set; }
