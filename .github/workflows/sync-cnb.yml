@@ -1,0 +1,100 @@
+name: sync-cnb
+
+# GitHub Release 发布后，自动把 GHCR 多架构镜像同步到 CNB 制品库，并把代码（main + 全部 tag）镜像到 CNB 仓库。
+# GHCR 为唯一构建源，本流水线只搬运、不重新构建。
+# 也支持 Actions 页手动触发（workflow_dispatch）补同步历史版本。
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要同步的版本号（GHCR 数字 tag，如 2.3）'
+        required: true
+        default: '2.3'
+      sync_latest:
+        description: '同时覆盖 latest 标签'
+        type: boolean
+        default: true
+
+env:
+  GHCR_IMAGE: ghcr.io/szboboxing/property-ledger
+  CNB_IMAGE: docker.cnb.cool/szjack/property-ledger
+  CNB_REPO: https://cnb.cool/szjack/property-ledger.git
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # release 事件 ref 形如 refs/tags/v2.3 → GHCR 数字 tag 2.3
+            VER="${GITHUB_REF_NAME#v}"
+            PUSH_LATEST=true
+          else
+            VER="${{ github.event.inputs.version }}"
+            PUSH_LATEST="${{ github.event.inputs.sync_latest }}"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "push_latest=$PUSH_LATEST" >> "$GITHUB_OUTPUT"
+          echo "→ 同步版本: $VER (latest=$PUSH_LATEST)"
+
+      - name: Ensure skopeo
+        run: command -v skopeo >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y skopeo)
+
+      - name: Copy versioned image (multi-arch, all platforms)
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          GH_USER: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          # --all 保留多架构 manifest list（amd64 + arm64 原样复制，不重建）
+          skopeo copy --all \
+            --src-creds "${GH_USER}:${GH_TOKEN}" \
+            --dest-creds "cnb:${CNB_TOKEN}" \
+            "docker://${GHCR_IMAGE}:${VER}" \
+            "docker://${CNB_IMAGE}:${VER}"
+          # CNB 端额外保留带 v 前缀的 tag，与发布版本号一致
+          skopeo copy --all \
+            --src-creds "${GH_USER}:${GH_TOKEN}" \
+            --dest-creds "cnb:${CNB_TOKEN}" \
+            "docker://${GHCR_IMAGE}:${VER}" \
+            "docker://${CNB_IMAGE}:v${VER}"
+
+      - name: Copy latest
+        if: steps.ver.outputs.push_latest == 'true'
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          GH_USER: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          skopeo copy --all \
+            --src-creds "${GH_USER}:${GH_TOKEN}" \
+            --dest-creds "cnb:${CNB_TOKEN}" \
+            "docker://${GHCR_IMAGE}:latest" \
+            "docker://${CNB_IMAGE}:latest"
+
+  code:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mirror main branch and tags to CNB
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+        run: |
+          git remote add cnb "https://cnb:${CNB_TOKEN}@cnb.cool/szjack/property-ledger.git"
+          # CNB 是 GitHub 的单向镜像，强制与源保持一致
+          git push cnb --force "refs/remotes/origin/main:refs/heads/main"
+          git push cnb --force --tags
