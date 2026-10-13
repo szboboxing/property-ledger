@@ -72,7 +72,7 @@ jobs:
           echo "backfill=$BACKFILL" >> "$GITHUB_OUTPUT"
           echo "→ 源 tag: $SRC, 回补 GHCR 版本 tag: $BACKFILL"
 
-      - name: Copy image to CNB (multi-arch: vX.Y, X.Y[, latest])
+      - name: 'Copy image to CNB (multi-arch: vX.Y, X.Y[, latest])'
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
           GH_USER: ${{ github.actor }}
