@@ -3,6 +3,9 @@ name: sync-cnb
 # GitHub Release 发布后，自动把 GHCR 多架构镜像同步到 CNB 制品库，并把代码（main + 全部 tag）镜像到 CNB 仓库。
 # GHCR 为唯一构建源，本流水线只搬运、不重新构建。
 # 也支持 Actions 页手动触发（workflow_dispatch）补同步历史版本。
+#
+# 说明：v2.3 及更早的 GHCR 镜像只有 latest 标签（旧 semver tag 规则失效），
+# 因此源 tag 不存在时自动回退 latest，并顺手把版本 tag 回补到 GHCR。
 
 on:
   release:
@@ -10,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '要同步的版本号（GHCR 数字 tag，如 2.3）'
+        description: '要同步的版本号（数字 tag，如 2.3）'
         required: true
         default: '2.3'
       sync_latest:
@@ -28,58 +31,87 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
+      packages: write
     steps:
       - name: Resolve version
         id: ver
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
-            # release 事件 ref 形如 refs/tags/v2.3 → GHCR 数字 tag 2.3
-            VER="${GITHUB_REF_NAME#v}"
+            # release 事件 ref 形如 refs/tags/v2.3
+            VTAG="${GITHUB_REF_NAME}"
             PUSH_LATEST=true
           else
-            VER="${{ github.event.inputs.version }}"
+            VTAG="v${{ github.event.inputs.version }}"
             PUSH_LATEST="${{ github.event.inputs.sync_latest }}"
           fi
-          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          VER="${VTAG#v}"
+          echo "vtag=$VTAG" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
           echo "push_latest=$PUSH_LATEST" >> "$GITHUB_OUTPUT"
-          echo "→ 同步版本: $VER (latest=$PUSH_LATEST)"
+          echo "→ 目标版本: $VTAG (latest=$PUSH_LATEST)"
 
       - name: Ensure skopeo
         run: command -v skopeo >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y skopeo)
 
-      - name: Copy versioned image (multi-arch, all platforms)
+      - name: Resolve source tag (fallback to latest for old releases)
+        id: src
         env:
-          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
           GH_USER: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VER="${{ steps.ver.outputs.version }}"
-          # --all 保留多架构 manifest list（amd64 + arm64 原样复制，不重建）
-          skopeo copy --all \
-            --src-creds "${GH_USER}:${GH_TOKEN}" \
-            --dest-creds "cnb:${CNB_TOKEN}" \
-            "docker://${GHCR_IMAGE}:${VER}" \
-            "docker://${CNB_IMAGE}:${VER}"
-          # CNB 端额外保留带 v 前缀的 tag，与发布版本号一致
-          skopeo copy --all \
-            --src-creds "${GH_USER}:${GH_TOKEN}" \
-            --dest-creds "cnb:${CNB_TOKEN}" \
-            "docker://${GHCR_IMAGE}:${VER}" \
-            "docker://${CNB_IMAGE}:v${VER}"
+          VTAG="${{ steps.ver.outputs.vtag }}"
+          if skopeo inspect --creds "${GH_USER}:${GH_TOKEN}" "docker://${GHCR_IMAGE}:${VTAG}" >/dev/null 2>&1; then
+            SRC="$VTAG"
+            BACKFILL=false
+          else
+            echo "::warning title=版本 tag 缺失::GHCR 无 ${VTAG}，回退用 latest 作为源（老版本正常现象）"
+            SRC="latest"
+            BACKFILL=true
+          fi
+          echo "src=$SRC" >> "$GITHUB_OUTPUT"
+          echo "backfill=$BACKFILL" >> "$GITHUB_OUTPUT"
+          echo "→ 源 tag: $SRC, 回补 GHCR 版本 tag: $BACKFILL"
 
-      - name: Copy latest
-        if: steps.ver.outputs.push_latest == 'true'
+      - name: Copy image to CNB (multi-arch: vX.Y, X.Y[, latest])
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
           GH_USER: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
+          SRC="${{ steps.src.outputs.src }}"
+          VTAG="${{ steps.ver.outputs.vtag }}"
+          VER="${{ steps.ver.outputs.ver }}"
+          # --all 保留多架构 manifest list（amd64 + arm64 原样复制，不重建）
+          for DEST_TAG in "$VTAG" "$VER"; do
+            echo "::notice title=CNB 镜像::docker.cnb.cool/szjack/property-ledger:${DEST_TAG} ← ${SRC}"
+            skopeo copy --all \
+              --src-creds "${GH_USER}:${GH_TOKEN}" \
+              --dest-creds "cnb:${CNB_TOKEN}" \
+              "docker://${GHCR_IMAGE}:${SRC}" \
+              "docker://${CNB_IMAGE}:${DEST_TAG}"
+          done
+          if [ "${{ steps.ver.outputs.push_latest }}" = "true" ]; then
+            skopeo copy --all \
+              --src-creds "${GH_USER}:${GH_TOKEN}" \
+              --dest-creds "cnb:${CNB_TOKEN}" \
+              "docker://${GHCR_IMAGE}:latest" \
+              "docker://${CNB_IMAGE}:latest"
+          fi
+
+      - name: Backfill version tag on GHCR
+        if: steps.src.outputs.backfill == 'true'
+        env:
+          GH_USER: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VTAG="${{ steps.ver.outputs.vtag }}"
+          echo "→ 回补 GHCR 版本 tag: ${VTAG} ← latest"
           skopeo copy --all \
             --src-creds "${GH_USER}:${GH_TOKEN}" \
-            --dest-creds "cnb:${CNB_TOKEN}" \
+            --dest-creds "${GH_USER}:${GH_TOKEN}" \
             "docker://${GHCR_IMAGE}:latest" \
-            "docker://${CNB_IMAGE}:latest"
+            "docker://${GHCR_IMAGE}:${VTAG}"
 
   code:
     runs-on: ubuntu-latest
