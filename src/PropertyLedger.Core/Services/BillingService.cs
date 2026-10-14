@@ -144,6 +144,214 @@ public class BillingService
         return created;
     }
 
+    // ───────────────────────── 租约变更后账单重算 ─────────────────────────
+
+    /// <summary>账单在重算中的处置类别说明（供界面预览/汇总使用）。</summary>
+    public sealed record LeaseBillItem(
+        int BillId, DateTime PeriodStart, DateTime PeriodEnd, DateTime DueDate,
+        decimal OldRent, decimal NewRent, bool HasPayments, bool IsManual, int ItemCount, string Kind);
+
+    /// <summary>重算预览：重算 / 删除 / 冻结 / 补建 / 阻止 五类明细。</summary>
+    public sealed record LeaseRecalcPreview(
+        List<LeaseBillItem> Recalculate,
+        List<LeaseBillItem> Delete,
+        List<LeaseBillItem> Frozen,
+        List<PeriodPlan> Create,
+        List<LeaseBillItem> Blocked)
+    {
+        /// <summary>除冻结外是否真的有账单会变动。</summary>
+        public bool HasChanges => Recalculate.Count > 0 || Delete.Count > 0 || Create.Count > 0;
+    }
+
+    /// <summary>重算执行结果计数。</summary>
+    public readonly record struct LeaseRecalcResult(int Recalculated, int Deleted, int Created, int Frozen);
+
+    /// <summary>
+    /// 判断租约前后两个版本之间，是否改了会影响账单的关键字段
+    /// （起租/到期、租金、递增方式与值、付租日、付租周期）。
+    /// </summary>
+    public static bool IsBillAffectingChange(Lease oldLease, Lease newLease)
+        => oldLease.StartDate.Date != newLease.StartDate.Date
+           || oldLease.EndDate?.Date != newLease.EndDate?.Date
+           || oldLease.RentAmount != newLease.RentAmount
+           || oldLease.EscMode != newLease.EscMode
+           || oldLease.EscValue != newLease.EscValue
+           || oldLease.PaymentDay != newLease.PaymentDay
+           || oldLease.PaymentCycle != newLease.PaymentCycle;
+
+    /// <summary>
+    /// 按新租约条款对其全部账单做重算分类（纯计算，不落库）：
+    /// ① 无收款的自动账单：新条款下账期仍成立 → Recalculate（更新账期/到期日/租金，杂费保留）；
+    /// 账期不再成立（缩租期、月付↔季付）→ 无杂费 Delete、挂杂费 Blocked（阻止保存，防杂费悬空）；
+    /// ② 有任意收款（含部分收）或人工补录账单：Frozen，金额/账期/到期日一律不动；
+    /// ③ 新条款下应有、但现存账单未覆盖的账期（含起租日提前的历史月份）：Create。
+    /// </summary>
+    public static LeaseRecalcPreview BuildRecalcPreview(
+        Lease lease, IReadOnlyList<Bill> bills, DateTime throughMonth)
+    {
+        var recalc = new List<LeaseBillItem>();
+        var delete = new List<LeaseBillItem>();
+        var frozen = new List<LeaseBillItem>();
+        var blocked = new List<LeaseBillItem>();
+
+        foreach (var b in bills)
+        {
+            var hasPayments = (b.Payments?.Count > 0) || b.PaidAmount > 0.001m;
+            var itemCount = b.Items?.Count ?? 0;
+            var matches = TryGetPeriod(lease, b.PeriodStart.Year, b.PeriodStart.Month, out var plan);
+
+            if (hasPayments || b.IsManual)
+            {
+                frozen.Add(new LeaseBillItem(
+                    b.Id, b.PeriodStart, b.PeriodEnd, b.DueDate,
+                    b.RentAmount, b.RentAmount, hasPayments, b.IsManual, itemCount,
+                    b.IsManual ? "frozen-manual" : "frozen-payment"));
+            }
+            else if (matches)
+            {
+                recalc.Add(Item(b, plan.RentAmount, plan.PeriodEnd, plan.DueDate, "recalc"));
+            }
+            else if (itemCount > 0)
+            {
+                blocked.Add(Item(b, b.RentAmount, b.PeriodEnd, b.DueDate, "blocked"));
+            }
+            else
+            {
+                delete.Add(Item(b, 0m, b.PeriodEnd, b.DueDate, "delete"));
+            }
+        }
+
+        // 幸存账单（重算后按新账期 + 冻结账单）覆盖的月份，补建时跳过，避免双重出账
+        var covered = new HashSet<(int Year, int Month)>();
+        foreach (var b in bills)
+        {
+            var survives = frozen.Exists(x => x.BillId == b.Id);
+            var recalcTo = recalc.FirstOrDefault(x => x.BillId == b.Id);
+            DateTime coverFrom, coverTo;
+            if (recalcTo is not null)
+            {
+                coverFrom = PeriodCalendar.FirstDayOfMonth(recalcTo.PeriodStart);
+                coverTo = PeriodCalendar.FirstDayOfMonth(recalcTo.PeriodEnd);
+            }
+            else if (survives)
+            {
+                coverFrom = PeriodCalendar.FirstDayOfMonth(b.PeriodStart);
+                coverTo = PeriodCalendar.FirstDayOfMonth(b.PeriodEnd);
+            }
+            else continue;
+
+            for (var c = coverFrom; c <= coverTo; c = c.AddMonths(1))
+                covered.Add((c.Year, c.Month));
+        }
+
+        var toCreate = new List<PeriodPlan>();
+        var throughFirst = PeriodCalendar.FirstDayOfMonth(throughMonth);
+        var cursor = PeriodCalendar.FirstDayOfMonth(lease.StartDate);
+        while (cursor <= throughFirst)
+        {
+            if (TryGetPeriod(lease, cursor.Year, cursor.Month, out var plan))
+            {
+                var months = PlanMonths(plan);
+                if (!months.Any(m => covered.Contains(m)))
+                    toCreate.Add(plan);
+            }
+            cursor = cursor.AddMonths(1);
+        }
+
+        return new LeaseRecalcPreview(recalc, delete, frozen, toCreate, blocked);
+
+        static LeaseBillItem Item(Bill b, decimal newRent, DateTime periodEnd, DateTime dueDate, string kind)
+            => new(b.Id, b.PeriodStart, periodEnd, dueDate,
+                   b.RentAmount, newRent, b.Payments?.Count > 0 || b.PaidAmount > 0.001m,
+                   b.IsManual, b.Items?.Count ?? 0, kind);
+    }
+
+    /// <summary>
+    /// 落库执行重算：按当前（已保存的）租约条款同步全部账单，单次事务提交。
+    /// Blocked 非空时整体抛错不做任何改动；所有幸存账单同步房间/租客冗余字段。
+    /// </summary>
+    public async Task<LeaseRecalcResult> ApplyLeaseRecalcAsync(
+        int leaseId, DateTime throughMonth, CancellationToken ct = default)
+    {
+        var lease = await _db.Leases.AsNoTracking().FirstOrDefaultAsync(l => l.Id == leaseId, ct)
+                    ?? throw new DomainException("租约不存在。");
+
+        var bills = await _db.Bills
+            .Include(b => b.Items).Include(b => b.Payments)
+            .Where(b => b.LeaseId == leaseId)
+            .ToListAsync(ct);
+
+        var preview = BuildRecalcPreview(lease, bills, throughMonth);
+        if (preview.Blocked.Count > 0)
+        {
+            var periods = string.Join("、", preview.Blocked
+                .Select(x => x.PeriodStart.ToString("yyyy-MM") + (x.PeriodEnd.Year != x.PeriodStart.Year || x.PeriodEnd.Month != x.PeriodStart.Month ? " 至 " + x.PeriodEnd.ToString("yyyy-MM") : "")));
+            throw new DomainException(
+                $"以下账期的账单含杂费明细，调整租期/付租周期后将不再成立：{periods}。请先到账单页移除或改挂这些杂费，再修改租约。");
+        }
+
+        var byId = bills.ToDictionary(b => b.Id);
+
+        foreach (var x in preview.Frozen)
+        {
+            var b = byId[x.BillId];
+            b.RoomId = lease.RoomId;
+            b.TenantId = lease.TenantId;
+            // 冻结：金额/账期/到期日/状态一律不碰
+        }
+
+        foreach (var x in preview.Recalculate)
+        {
+            var b = byId[x.BillId];
+            b.RoomId = lease.RoomId;
+            b.TenantId = lease.TenantId;
+            b.PeriodEnd = x.PeriodEnd;
+            b.DueDate = x.DueDate;
+            b.RentAmount = x.NewRent;
+            Recalculate(b);
+        }
+
+        foreach (var x in preview.Delete)
+        {
+            var b = byId[x.BillId];
+            _db.BillItems.RemoveRange(b.Items);
+            _db.Bills.Remove(b);
+        }
+
+        foreach (var plan in preview.Create)
+        {
+            _db.Bills.Add(new Bill
+            {
+                LeaseId = lease.Id,
+                RoomId = lease.RoomId,
+                TenantId = lease.TenantId,
+                PeriodStart = plan.PeriodStart,
+                PeriodEnd = plan.PeriodEnd,
+                DueDate = plan.DueDate,
+                RentAmount = plan.RentAmount,
+                TotalAmount = plan.RentAmount,
+                PaidAmount = 0m,
+                Status = BillStatus.Unpaid,
+            });
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return new LeaseRecalcResult(
+            preview.Recalculate.Count, preview.Delete.Count, preview.Create.Count, preview.Frozen.Count);
+    }
+
+    private static List<(int Year, int Month)> PlanMonths(PeriodPlan plan)
+    {
+        var list = new List<(int, int)>();
+        for (var c = PeriodCalendar.FirstDayOfMonth(plan.PeriodStart);
+             c <= PeriodCalendar.FirstDayOfMonth(plan.PeriodEnd);
+             c = c.AddMonths(1))
+        {
+            list.Add((c.Year, c.Month));
+        }
+        return list;
+    }
+
     // ───────────────────────── 人工补录 ─────────────────────────
 
     /// <summary>补录结果统计：新建数 / 跳过数（该账期已有账单）/ 租期外月份数。</summary>

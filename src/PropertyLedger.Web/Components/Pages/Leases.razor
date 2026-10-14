@@ -60,7 +60,8 @@ else
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label">月租金 *</label>
-                <input type="number" step="0.01" class="form-control" @bind="form.RentAmount" />
+                <input type="number" step="0.01" min="0.01" class="form-control" @bind="form.RentAmount" />
+                <div class="section-hint">必填，大于 0；如需个别月份免租，可在账单页把当月租金改为 0</div>
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label">租金递增</label>
@@ -109,6 +110,10 @@ else
         @if (Error is not null)
         {
             <div class="alert alert-danger py-2 px-3 mt-2 mb-0">@Error</div>
+        }
+        @if (Info is not null)
+        {
+            <div class="alert alert-success py-2 px-3 mt-2 mb-0">@Info</div>
         }
     </div>
 
@@ -360,6 +365,7 @@ else
     private List<Lease> leases = new();
     private int? editingId;
     private string? Error;
+    private string? Info;
     private FormModel form = new();
 
     private class FormModel
@@ -450,6 +456,7 @@ else
             Cycle = l.PaymentCycle, Note = l.Note,
         };
         Error = null;
+        Info = null;
     }
 
     private void ResetForm()
@@ -463,12 +470,13 @@ else
             RentAmount = firstRoom?.DefaultRent ?? 0,
         };
         Error = null;
+        Info = null;
     }
 
     private async Task Save()
     {
         if (form.RoomId <= 0 || form.TenantId <= 0) { Error = "请选择房间和租客。"; return; }
-        if (form.RentAmount < 0) { Error = "租金不能为负。"; return; }
+        if (form.RentAmount <= 0) { Error = "月租金为必填项，请填写大于 0 的金额。"; return; }
         if (form.EscMode != 0 && form.EscValue <= 0)
         {
             Error = "请填写有效的每年递增" + (form.EscMode == 1 ? "比例" : "金额") + "。";
@@ -482,6 +490,8 @@ else
             _ => form.StartDate.Date.AddYears(int.Parse(form.TermMode)).AddDays(-1),
         };
         if (end.HasValue && end.Value < form.StartDate.Date) { Error = "到期日不能早于起租日。"; return; }
+
+        var thisMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
 
         if (editingId is null)
         {
@@ -501,25 +511,84 @@ else
             };
             Db.Leases.Add(created);
             await Db.SaveChangesAsync();
+            ResetForm();
+            await LoadLeasesAsync();
             // 刚签下租约 → 顺手提示把这次的想法记入经验库（可跳过）
             PromptKnowledge(created, KnowledgeCategory.Rental);
+            return;
         }
-        else
+
+        // ── 编辑租约：关键字段变更时先预览对账单的影响，用户确认后保存并重算 ──
+        var old = await Db.Leases.AsNoTracking().FirstOrDefaultAsync(l => l.Id == editingId);
+        if (old is null) { Error = "租约不存在。"; return; }
+
+        var updated = ApplyFormTo(new Lease { Id = old.Id, Status = old.Status, CreatedAt = old.CreatedAt }, end);
+        var keyChanged = BillingService.IsBillAffectingChange(old, updated);
+        if (keyChanged)
         {
-            var l = await Db.Leases.FindAsync(editingId);
-            if (l is not null)
+            var bills = await Db.Bills
+                .Include(b => b.Items).Include(b => b.Payments)
+                .Where(b => b.LeaseId == old.Id)
+                .ToListAsync();
+            var preview = BillingService.BuildRecalcPreview(updated, bills, thisMonth);
+            if (preview.Blocked.Count > 0) { Error = BuildBlockedError(preview); return; }
+            if (preview.HasChanges &&
+                !await JS.InvokeAsync<bool>("confirm", BuildRecalcConfirm(preview)))
             {
-                l.RoomId = form.RoomId; l.TenantId = form.TenantId;
-                l.StartDate = form.StartDate; l.EndDate = end;
-                l.RentAmount = form.RentAmount; l.EscMode = form.EscMode; l.EscValue = form.EscValue;
-                l.HouseDeposit = form.HouseDeposit; l.UtilityDeposit = form.UtilityDeposit;
-                l.PaymentDay = form.PaymentDay; l.PaymentCycle = form.Cycle; l.Note = form.Note;
+                return;
             }
         }
+
+        var entity = await Db.Leases.FindAsync(editingId);
+        if (entity is null) { Error = "租约不存在。"; return; }
+        ApplyFormTo(entity, end);
         await Db.SaveChangesAsync();
+
+        // 无论关键字段是否变化都执行一次：幂等重算 + 同步房间/租客冗余 + 补齐当月账单
+        var result = await Billing.ApplyLeaseRecalcAsync(entity.Id, thisMonth);
+        var msg = $"租约已保存，账单已同步：重算 {result.Recalculated} 张、删除 {result.Deleted} 张、补建 {result.Created} 张";
+        msg += result.Frozen > 0
+            ? $"；{result.Frozen} 张已有收款或补录账单保持不变（历史金额锁定）。"
+            : "。";
         ResetForm();
+        Info = msg;
         await LoadLeasesAsync();
     }
+
+    private Lease ApplyFormTo(Lease l, DateTime? end)
+    {
+        l.RoomId = form.RoomId; l.TenantId = form.TenantId;
+        l.StartDate = form.StartDate; l.EndDate = end;
+        l.RentAmount = form.RentAmount; l.EscMode = form.EscMode; l.EscValue = form.EscValue;
+        l.HouseDeposit = form.HouseDeposit; l.UtilityDeposit = form.UtilityDeposit;
+        l.PaymentDay = form.PaymentDay; l.PaymentCycle = form.Cycle; l.Note = form.Note;
+        return l;
+    }
+
+    private static string BuildRecalcConfirm(BillingService.LeaseRecalcPreview p)
+    {
+        var lines = new List<string> { "修改租金 / 租期 / 付租方式后，系统将按新条款同步该租约的账单：", "" };
+        if (p.Recalculate.Count > 0)
+            lines.Add($"• {p.Recalculate.Count} 张未付账单将重新计算金额 / 到期日（已登记的杂费保留）");
+        if (p.Delete.Count > 0)
+            lines.Add($"• {p.Delete.Count} 张账单已不在新租期 / 付租周期内，将删除："
+                      + string.Join("、", p.Delete.Select(x => x.PeriodStart.ToString("yyyy-MM"))));
+        if (p.Create.Count > 0)
+            lines.Add($"• {p.Create.Count} 张缺失账单将补建："
+                      + string.Join("、", p.Create.Select(x => x.PeriodStart.ToString("yyyy-MM"))));
+        lines.Add($"• {p.Frozen.Count} 张已有收款（含部分收款）或补录账单保持不变，历史金额锁定。");
+        lines.Add("");
+        lines.Add("确定保存并同步账单吗？");
+        return string.Join("\n", lines);
+    }
+
+    private static string BuildBlockedError(BillingService.LeaseRecalcPreview p)
+        => "以下账期的账单含杂费明细，调整租期 / 付租周期后将不再成立："
+           + string.Join("、", p.Blocked.Select(x =>
+               x.PeriodStart.ToString("yyyy-MM")
+               + (x.PeriodEnd.Year != x.PeriodStart.Year || x.PeriodEnd.Month != x.PeriodStart.Month
+                   ? " 至 " + x.PeriodEnd.ToString("yyyy-MM") : "")))
+           + "。请先到账单页移除或改挂这些杂费，再修改租约。";
 
     private async Task End(Lease l)
     {

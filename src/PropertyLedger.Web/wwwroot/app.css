@@ -438,3 +438,156 @@ input[type="file"]::file-selector-button {
     padding: .25rem .75rem; margin-right: .75rem; cursor: pointer;
 }
 input[type="file"]::file-selector-button:hover { background: rgba(217, 181, 125, .24); }
+
+/* ============================================================
+   浅色主题（一键切换；暗色为默认，本段仅做覆盖）
+   ============================================================ */
+html[data-theme="light"] {
+    color-scheme: light;
+    /* 品牌金在浅底上加深，保证可读性与对比度 */
+    --brand: #9A7635;
+    --brand-dark: #7A5E2C;
+    --brand-soft: rgba(154, 118, 53, .12);
+    --gold: #9A7635;
+    --gold-deep: #8A6A35;
+    --gold-bright: #7A5E2C;
+    --ink-gold: #2C2419;
+    /* 底色 / 文字：暖纸白 + 深棕墨 */
+    --bg: #F4EEE2;
+    --panel: #FFFFFF;
+    --ink: #2C2419;
+    --muted: #6B5D45;
+    --faint: #9A8C72;
+    --line: rgba(138, 106, 53, .18);
+    --line2: rgba(138, 106, 53, .35);
+    /* 语义色（浅底加深） */
+    --danger: #C23B30;
+    --warn: #B25C09;
+    --ok: #1F7A3D;
+    --bs-body-bg: var(--bg);
+    --bs-body-color: var(--ink);
+    --bs-border-color: var(--line);
+    --bs-secondary-color: rgba(44, 36, 25, .65);
+    --bs-tertiary-bg: #FFFDF8;
+    --bs-secondary-bg: #F7F1E4;
+    --bs-emphasis-color: var(--ink);
+    --shadow: 0 10px 30px rgba(120, 92, 45, .16);
+    --shadow-sm: 0 4px 14px rgba(120, 92, 45, .10);
+}
+html[data-theme="light"] body {
+    background:
+        radial-gradient(1100px 700px at 85% -10%, rgba(217, 181, 125, .16), transparent 60%),
+        radial-gradient(900px 600px at -10% 40%, rgba(180, 130, 60, .10), transparent 55%),
+        var(--bg);
+}
+html[data-theme="light"] ::selection { color: #fff; }
+html[data-theme="light"] input[type="date"],
+html[data-theme="light"] input[type="month"] { color-scheme: light; }
+
+/* 表单：白纸深字 */
+html[data-theme="light"] .form-control,
+html[data-theme="light"] .form-select,
+html[data-theme="light"] .form-check-input {
+    background-color: #FFFDF8;
+    border-color: var(--line2);
+    color: var(--ink);
+}
+html[data-theme="light"] .form-control:focus,
+html[data-theme="light"] .form-select:focus { background-color: #fff; color: var(--ink); }
+html[data-theme="light"] .form-select option,
+html[data-theme="light"] select option { background: #fff; color: var(--ink); }
+html[data-theme="light"] .btn-close { filter: none; }
+
+/* 标题金字改深金渐变 */
+html[data-theme="light"] .page-head h1,
+html[data-theme="light"] .login-card h1 {
+    background: linear-gradient(115deg, #8A6A35, #B98E48 45%, #9A7635 70%, #6E5427);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+/* 玻璃表面改浅纸玻璃 */
+html[data-theme="light"] .app-sidebar {
+    background: rgba(255, 252, 245, .86);
+    border-right-color: var(--line);
+}
+html[data-theme="light"] .app-topbar {
+    background: rgba(255, 252, 245, .9);
+    border-color: var(--line);
+}
+html[data-theme="light"] .nav-item { color: rgba(44, 36, 25, .78); }
+html[data-theme="light"] .card,
+html[data-theme="light"] .stat {
+    background: linear-gradient(160deg, rgba(255, 255, 255, .92), rgba(250, 243, 228, .8));
+    border-color: var(--line);
+}
+html[data-theme="light"] .card::after {
+    background: linear-gradient(90deg, transparent, rgba(154, 118, 53, .28), transparent);
+}
+
+/* 表格 */
+html[data-theme="light"] .table-wrap { background: #FFFDF8; border-color: var(--line); }
+html[data-theme="light"] table.data thead th {
+    background: rgba(217, 181, 125, .14);
+    color: var(--muted);
+    border-bottom-color: var(--line);
+}
+html[data-theme="light"] table.data tbody td { border-top-color: var(--line); }
+@media (max-width: 767px) {
+    html[data-theme="light"] table.data tr {
+        background: #FFFDF8;
+        border-color: var(--line);
+    }
+}
+
+/* 徽章浅底深字 */
+html[data-theme="light"] .st-unpaid { background: rgba(194, 59, 48, .1); color: var(--danger); }
+html[data-theme="light"] .st-partial { background: rgba(178, 92, 9, .12); color: var(--warn); }
+html[data-theme="light"] .st-paid { background: rgba(31, 122, 61, .12); color: var(--ok); }
+html[data-theme="light"] .st-neutral { background: rgba(107, 93, 69, .12); color: var(--muted); }
+
+/* 提示条 */
+html[data-theme="light"] .alert-danger { background: rgba(194, 59, 48, .08); border-color: rgba(194, 59, 48, .3); color: var(--danger); }
+html[data-theme="light"] .alert-success { background: rgba(31, 122, 61, .08); border-color: rgba(31, 122, 61, .3); color: var(--ok); }
+html[data-theme="light"] .alert-warning { background: rgba(178, 92, 9, .08); border-color: rgba(178, 92, 9, .3); color: var(--warn); }
+
+/* 富文本 / 代码 / 内嵌面板 */
+html[data-theme="light"] .rich-note { background: #FFFDF8; }
+html[data-theme="light"] .rich-toolbar { background: rgba(217, 181, 125, .1); }
+html[data-theme="light"] .rich-view { background: #FBF6EA; color: var(--ink); }
+html[data-theme="light"] .note-expand td { background: rgba(217, 181, 125, .08); }
+html[data-theme="light"] .kb-item { background: #FFFDF8; border-color: var(--line); }
+html[data-theme="light"] .update-notes { background: #FBF6EA; color: var(--ink); }
+html[data-theme="light"] .manual-cmd { background: #FBF6EA; }
+html[data-theme="light"] .manual-cmd code { background: #EDE3CE; color: #6E5427; }
+html[data-theme="light"] .danger-zone { background: rgba(194, 59, 48, .05); }
+html[data-theme="light"] .batch-settle-zone { background: rgba(154, 118, 53, .08); }
+html[data-theme="light"] .year-block-header { background: rgba(217, 181, 125, .14); }
+html[data-theme="light"] .update-badge,
+html[data-theme="light"] .app-topbar .update-badge { background: rgba(217, 181, 125, .16); color: var(--gold-deep); }
+html[data-theme="light"] .update-found { background: rgba(31, 122, 61, .07); }
+html[data-theme="light"] .kb-source-hint { background: rgba(31, 122, 61, .08); color: var(--ok); }
+html[data-theme="light"] .upgrade-confirm { background: rgba(194, 59, 48, .05); }
+html[data-theme="light"] .upgrade-progress { background: rgba(154, 118, 53, .08); }
+html[data-theme="light"] #blazor-error-ui {
+    background: #FFFDF8; color: var(--danger);
+    border-top: 1px solid rgba(194, 59, 48, .35);
+    box-shadow: 0 -1px 6px rgba(120, 92, 45, .12);
+}
+
+/* 主题切换按钮（侧栏 foot / 顶栏 / 登录页通用） */
+.theme-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 34px; font-size: 1.05rem; line-height: 1;
+    border-radius: 10px; border: 1px solid var(--line2);
+    background: transparent; color: var(--gold-bright); cursor: pointer;
+    transition: background .15s;
+}
+.theme-toggle:hover { background: rgba(217, 181, 125, .14); }
+.sidebar-foot .theme-toggle { width: 100%; margin-bottom: 8px; }
+.theme-toggle-fixed {
+    position: fixed; top: 14px; right: 14px; z-index: 1030;
+    background: var(--panel); box-shadow: var(--shadow-sm);
+}
+@media (max-width: 767px) {
+    /* 手机顶栏已有 sticky 栏，登录页固定钮保留；顶栏内按钮不固定 */
+}
